@@ -77,7 +77,7 @@ intent = stripe.PaymentIntent.create(
 
 print(f"[2] PaymentIntent:     {intent.id}")
 print(f"    Status:            {intent.status}")
-print(f"    Expected:          requires_capture")
+print("    Expected:          requires_capture")
 
 # ── Step 3: Capture the actual share (the post-attendance moment) ─────────
 # Planner has marked attendance. We capture only the actual per-person
@@ -89,9 +89,9 @@ captured = stripe.PaymentIntent.capture(
 )
 
 print(f"\n[3] Status after capture: {captured.status}")
-print(f"    Expected:             succeeded")
+print("    Expected:             succeeded")
 print(f"\n    Authorized:  ${WORST_CASE_AMOUNT / 100:.2f}")
 print(f"    Captured:    ${ACTUAL_SHARE / 100:.2f}")
 print(f"    Released:    ${(WORST_CASE_AMOUNT - ACTUAL_SHARE) / 100:.2f}")
-print(f"\n    Check Stripe dashboard → Payments to verify the charge.")
-print(f"    Check Connect → Transfers to verify funds reached the planner.")
+print("\n    Check Stripe dashboard → Payments to verify the charge.")
+print("    Check Connect → Transfers to verify funds reached the planner.")
