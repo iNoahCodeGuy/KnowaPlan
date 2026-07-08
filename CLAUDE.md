@@ -21,6 +21,7 @@ over speed.
 If a change would contradict any of these, stop and ask.
 
 ## Commands
+- Run app:       .venv/bin/uvicorn app.main:app --reload
 - Run skeleton:  python skeleton_02_payment.py
 - Tests:         .venv/bin/pytest
 - Lint/format:   .venv/bin/ruff check . / .venv/bin/ruff format .

@@ -8,7 +8,7 @@ rejected.
 """
 import pytest
 
-from state_machines import (
+from app.state_machines import (
     ATTENDANCE,
     EVENT,
     PAYMENT,
