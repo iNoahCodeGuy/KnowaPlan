@@ -54,11 +54,12 @@ print(f"[1] Customer:          {customer.id}")
 # transfer_data.destination=planner_account_id
 #   → after capture, funds flow to planner's Stripe account
 #
-# request_extended_authorization="if_available"
-#   → extends capture window from 7 days to 30 days
-#
 # confirm=True
 #   → authorize the card immediately on creation
+#
+# Note: Extended Authorization (30-day capture window) is deferred —
+# it requires Stripe IC+ pricing. We rely on the default 7-day window.
+# See decisions.md (2026-05-26).
 intent = stripe.PaymentIntent.create(
     amount=WORST_CASE_AMOUNT,
     currency="usd",
