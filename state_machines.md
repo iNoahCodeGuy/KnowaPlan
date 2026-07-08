@@ -1,5 +1,8 @@
 # State machines
 
+Executable transcription: app/state_machines.py, kept in sync by
+tests/test_state_machines.py. On disagreement, this doc wins.
+
 ## Event
 draft → open → closed → settled → archived
                   ↓
@@ -26,13 +29,15 @@ Transitions:
 ## RSVP
 pending → going → going_paid → attended | no_show
        → maybe → going | declined
-       → declined
+       → declined → going (while event still open)
 
 - pending: invitee clicked link but hasn't responded
 - going: said yes, card authorized
 - going_paid: said yes, card authorized successfully
 - maybe: tentative; converted on reminder or by deadline
-- declined: said no
+- declined: said no; may still convert to going while the event is
+  open — requires a fresh card authorization, same as any RSVP
+  (decisions.md 2026-07-08). Not terminal
 - attended: planner marked present, capture executed
 - no_show: planner marked absent, authorization voided
 
@@ -67,6 +72,10 @@ Transitions:
 - captured → refunded: reverse an already-captured charge
 - failed → resolved: attendee pays via SMS settle-up link
 - failed → abandoned: 7-day grace expired, still unpaid
+
+Re-authorization after a terminal state (voided, abandoned) is a NEW
+payment instance — the next attempt row — not a transition out of a
+terminal state (decisions.md 2026-07-08).
 
 Deferred (v0) — revisit before opening to strangers:
 - requires_action: a 3DS/SCA challenge can occur on authorize. Not

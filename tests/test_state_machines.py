@@ -40,6 +40,8 @@ LEGAL: set[tuple[str, str, str]] = {
     ("rsvp", "going_paid", "no_show"),
     ("rsvp", "maybe", "going"),
     ("rsvp", "maybe", "declined"),
+    # late re-RSVP while event open — decisions.md 2026-07-08
+    ("rsvp", "declined", "going"),
     # Payment
     ("payment", "none", "authorized"),
     ("payment", "authorized", "captured"),
@@ -81,7 +83,7 @@ def test_undocumented_transitions_rejected(
 def test_terminal_states_allow_nothing() -> None:
     terminals = {
         "event": {"archived", "cancelled"},
-        "rsvp": {"declined", "attended", "no_show"},
+        "rsvp": {"attended", "no_show"},
         "payment": {"voided", "refunded", "resolved", "abandoned"},
         "attendance": {"present", "absent"},
     }

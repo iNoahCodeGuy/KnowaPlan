@@ -40,6 +40,15 @@ If a change would contradict any of these, stop and ask.
 - A capture and its matching attendance update happen together, or
   neither does.
 
+### Money guard (enforced, not advisory)
+A PreToolUse hook (.claude/hooks/money_guard.py, wired via
+.claude/settings.json) denies any .py edit that uses the Refund API
+or writes settle-scheduling code with a fixed offset and no expiry
+reference. Legitimate refund code (reversing a CAPTURED charge only)
+must assert state == "captured" and include the marker
+`refund-guard: captured-only` in the same edit. The guard fails
+closed; its behavior is pinned by tests/test_money_guard.py.
+
 ## Code style
 - Type hints on every function signature.
 - Async for anything touching the DB or Stripe.
@@ -49,4 +58,6 @@ If a change would contradict any of these, stop and ask.
 ## How to work here
 - Payment and state-machine code is load-bearing: explain the
   mechanism and let me review or write it. Do not author it wholesale.
+  The three bodies in app/payments.py (authorize / capture / void)
+  are stubs on purpose — they get written with owner review.
 - Never call the live Stripe API in tests — use test tokens / a mock.

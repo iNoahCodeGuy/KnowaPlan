@@ -19,15 +19,15 @@ EVENT: dict[str, set[str]] = {
 }
 
 # RSVP: going_paid is reached only via a successful authorization.
-# Note: scenarios.md lets a declined attendee tap "Going" again
-# before the event closes, but state_machines.md defines no
-# declined → going transition — unresolved, doc wins for now.
+# declined → going (decisions.md 2026-07-08) is valid only while
+# the Event is open — that guard lives in the service layer; this
+# table has no event context.
 RSVP: dict[str, set[str]] = {
     "pending": {"going", "maybe", "declined"},
     "going": {"going_paid"},
     "going_paid": {"attended", "no_show"},
     "maybe": {"going", "declined"},
-    "declined": set(),
+    "declined": {"going"},
     "attended": set(),
     "no_show": set(),
 }
