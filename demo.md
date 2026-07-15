@@ -104,11 +104,15 @@ Texted /e/, /r/, and tap-to-pay flows need a public HTTPS URL
 
    | Variable | Value |
    | --- | --- |
-   | DATABASE_URL | the Postgres service's URL with the scheme rewritten: `postgresql://…` → `postgresql+asyncpg://…` (keep the private `…railway.internal` host) |
+   | DATABASE_URL | one-click reference: `${{ Postgres.DATABASE_URL }}` (pick the Postgres service from the variable dropdown). The app adds the async driver itself — no scheme editing. |
    | STRIPE_SECRET_KEY | `sk_test_…` — TEST keys until the live flip |
    | STRIPE_PUBLISHABLE_KEY | `pk_test_…` |
    | PLANNER_ACCOUNT_ID | test-mode CONNECTED account until the live flip |
    | CREATE_PASSWORD | pick something; unset = creation locked |
+
+   (app/config.py normalizes a driverless `postgresql://` to
+   `postgresql+asyncpg://`, so Railway's own URL works verbatim —
+   the reference variable is the least error-prone way to set it.)
 
 4. Service → Settings → Networking → **Generate Domain** → your
    public https URL.
