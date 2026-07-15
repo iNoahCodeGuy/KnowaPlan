@@ -48,6 +48,7 @@ import stripe
 
 from app.config import get_settings
 from app.models import Attendee, Payment, Planner
+from app.state_machines import PAYMENT, can_transition
 
 
 class CardSaveFailed(Exception):
@@ -60,6 +61,26 @@ def _configure() -> None:
     # Lazy on purpose: tests blank the key and inject a mock module
     # (conftest); the real key is read only when a call is made.
     stripe.api_key = get_settings().stripe_secret_key
+
+
+def _validate_cents(actual_cents: int) -> None:
+    # bool is an int subclass; True must not read as 1 cent.
+    if isinstance(actual_cents, bool) or not isinstance(
+        actual_cents, int
+    ):
+        raise ValueError("amounts are integer cents (CLAUDE.md)")
+    if actual_cents <= 0:
+        raise ValueError("charge amount must be positive cents")
+
+
+def _move(payment: Payment, dst: str) -> None:
+    # models.py contract: every state write checks the table, so an
+    # illegal move is a loud error, never a silent typo.
+    if not can_transition(PAYMENT, payment.state, dst):
+        raise ValueError(
+            f"illegal Payment move {payment.state!r} -> {dst!r}"
+        )
+    payment.state = dst
 
 
 async def create_setup_intent(attendee: Attendee) -> str:
@@ -128,7 +149,80 @@ async def charge_share(
     attendance change BEFORE this call; this refuses a missing
     stamp or a drifted amount, and writes the terminal state after
     Stripe answers. A declined PI is recorded on the row."""
-    raise NotImplementedError("author with review — CLAUDE.md")
+    _validate_cents(actual_cents)
+    if payment.state != "none":
+        raise ValueError(
+            "charge_share fires from 'none' only; the tap-to-pay "
+            "link is the recovery from 'unpaid' (decisions.md "
+            "2026-07-16)"
+        )
+    if payment.charge_requested_at is None:
+        raise ValueError(
+            "record-first: stamp charge_requested_at (+ cents) in "
+            "the attendance transaction before moving money"
+        )
+    if payment.charge_requested_cents != actual_cents:
+        raise ValueError(
+            "amount drifted from the stamped intent — a retry must "
+            "re-send exactly what was recorded (decisions.md "
+            "2026-07-16)"
+        )
+    if (
+        attendee.stripe_customer_id is None
+        or attendee.stripe_payment_method_id is None
+    ):
+        raise ValueError(
+            "attendee has no saved card — collect via the "
+            "tap-to-pay link instead"
+        )
+    _configure()
+    try:
+        intent = await stripe.PaymentIntent.create_async(
+            amount=actual_cents,
+            currency="usd",
+            customer=attendee.stripe_customer_id,
+            payment_method=attendee.stripe_payment_method_id,
+            confirm=True,
+            off_session=True,
+            on_behalf_of=planner.stripe_account_id,
+            transfer_data={
+                "destination": planner.stripe_account_id,
+            },
+            metadata={
+                "payment_id": str(payment.id),
+                "event_id": str(payment.event_id),
+                "attendee_id": str(payment.attendee_id),
+            },
+            idempotency_key=f"{payment.id}:charge",
+        )
+    except stripe.CardError as err:
+        # "The card said no" is an OUTCOME, not an error: record it
+        # and open the tap-to-pay path. getattr throughout because a
+        # malformed error payload must still land the row in
+        # `unpaid`, never crash mid-bookkeeping.
+        error_obj = getattr(err, "error", None)
+        _move(payment, "unpaid")
+        payment.state_reason = (
+            getattr(error_obj, "decline_code", None)
+            or err.code
+            or "declined"
+        )
+        declined_pi = getattr(error_obj, "payment_intent", None)
+        if declined_pi is not None:
+            payment.stripe_payment_intent_id = declined_pi.id
+        return payment
+    if intent.status != "succeeded":
+        # Never write `paid` for money that has not collected.
+        # Dangling (stamp set, state `none`) is loud and safely
+        # retryable with the same key.
+        raise RuntimeError(
+            f"PaymentIntent {intent.id} returned status "
+            f"{intent.status!r}, not 'succeeded'"
+        )
+    _move(payment, "paid")
+    payment.charged_cents = actual_cents
+    payment.stripe_payment_intent_id = intent.id
+    return payment
 
 
 async def create_payment_link(

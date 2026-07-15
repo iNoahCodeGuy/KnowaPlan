@@ -69,12 +69,18 @@ def _payment(**overrides: Any) -> Payment:
     return Payment(**fields)
 
 
-def _card_error(mock_stripe: MagicMock) -> Exception:
-    """A real CardError (the class conftest attached) carrying the
-    declined PaymentIntent the way the SDK does: on err.error."""
-    err = mock_stripe.CardError("declined", None, "card_declined")
+def _card_error(
+    mock_stripe: MagicMock,
+    code: str = "card_declined",
+    decline_code: str | None = "insufficient_funds",
+) -> Exception:
+    """A real CardError (the class conftest attached) shaped the
+    way the SDK ships it: the parsed payload rides on err.error,
+    carrying the bank's decline_code and the declined PI."""
+    err = mock_stripe.CardError("declined", None, code)
     err.error = SimpleNamespace(
-        payment_intent=SimpleNamespace(id="pi_declined")
+        decline_code=decline_code,
+        payment_intent=SimpleNamespace(id="pi_declined"),
     )
     return err
 
@@ -203,12 +209,6 @@ class TestRecordSavedCard:
         assert attendee.stripe_payment_method_id is None
 
 
-@pytest.mark.xfail(
-    raises=NotImplementedError,
-    reason="Step 2 gate: body is author-with-review (CLAUDE.md); "
-    "strict so implementing the body forces this marker off",
-    strict=True,
-)
 class TestChargeShare:
     async def test_happy_path_charges_and_marks_paid(
         self, mock_stripe: MagicMock
@@ -253,9 +253,9 @@ class TestChargeShare:
         self, mock_stripe: MagicMock
     ) -> None:
         """A decline is an OUTCOME, not an exception: none ->
-        unpaid, reason recorded, and the declined PI kept on the
-        row (decisions.md 2026-07-16) — the DB must know at least
-        as much as Stripe."""
+        unpaid, the bank's SPECIFIC reason recorded, and the
+        declined PI kept on the row (decisions.md 2026-07-16) —
+        the DB must know at least as much as Stripe."""
         payment = _payment()
         mock_stripe.PaymentIntent.create_async = AsyncMock(
             side_effect=_card_error(mock_stripe)
@@ -267,9 +267,52 @@ class TestChargeShare:
 
         assert result is payment
         assert payment.state == "unpaid"
-        assert payment.state_reason == "card_declined"
+        assert payment.state_reason == "insufficient_funds"
         assert payment.stripe_payment_intent_id == "pi_declined"
         assert payment.charged_cents is None
+
+    async def test_decline_reason_falls_back_to_the_broad_code(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """No bank decline_code (e.g. deferred-3DS
+        authentication_required) -> record the broad code; the
+        attendee still lands on the on-session link path."""
+        payment = _payment()
+        mock_stripe.PaymentIntent.create_async = AsyncMock(
+            side_effect=_card_error(
+                mock_stripe,
+                code="authentication_required",
+                decline_code=None,
+            )
+        )
+
+        await charge_share(
+            payment, _carded_attendee(), _planner(), 3200
+        )
+
+        assert payment.state == "unpaid"
+        assert payment.state_reason == "authentication_required"
+
+    async def test_non_succeeded_intent_never_marks_paid(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """Never assume collected (CLAUDE.md): a returned intent
+        that is not 'succeeded' must not write `paid` — raise and
+        leave the row dangling for a same-key retry."""
+        payment = _payment()
+        mock_stripe.PaymentIntent.create_async = AsyncMock(
+            return_value=SimpleNamespace(
+                id="pi_odd", status="processing"
+            )
+        )
+
+        with pytest.raises(RuntimeError):
+            await charge_share(
+                payment, _carded_attendee(), _planner(), 3200
+            )
+        assert payment.state == "none"
+        assert payment.charged_cents is None
+        assert payment.stripe_payment_intent_id is None
 
     async def test_missing_stamp_refuses_before_stripe(
         self, mock_stripe: MagicMock
