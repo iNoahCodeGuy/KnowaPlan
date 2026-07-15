@@ -29,6 +29,7 @@ If a change would contradict any of these, stop and ask.
 - Run app:       .venv/bin/uvicorn app.main:app --reload
 - Create tables: .venv/bin/python -m app.bootstrap (create_all
   only — after a model change, drop/recreate the dev DB, re-run)
+- Demo run:      see demo.md (test-mode walk of the whole slice)
 - Run skeleton:  python skeleton_02_payment.py (hold-era proof;
   see its header note)
 - Tests:         .venv/bin/pytest
