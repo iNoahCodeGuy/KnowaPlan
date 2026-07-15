@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://localhost:5432/knowaplan"
     )
     stripe_secret_key: str = ""
+    # Browser-side key for the /r/ Payment Element island. Not a
+    # secret and cannot move money; still env-configured, never
+    # hardcoded.
+    stripe_publishable_key: str = ""
     test_planner_account_id: str = ""
 
 

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import stripe as real_stripe
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -16,6 +17,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import StaticPool
 
+from app.db import get_session
+from app.main import app
 from app.models import Base
 
 
@@ -61,3 +64,23 @@ async def db_session() -> AsyncIterator[AsyncSession]:
     async with maker() as session:
         yield session
     await engine.dispose()
+
+
+@pytest.fixture
+async def client(
+    db_session: AsyncSession,
+) -> AsyncIterator[AsyncClient]:
+    """ASGI test client with the app's DB dependency pointed at the
+    in-memory session: web tests exercise real routes against a
+    real (hermetic) DB, and mock_stripe keeps Stripe out."""
+
+    async def _override() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_session] = _override
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
