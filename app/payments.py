@@ -1,9 +1,10 @@
-"""Payment operations — MECHANISM DOCUMENTED, BODIES UNWRITTEN.
+"""Payment operations — the charge-at-close Stripe surface.
 
 Per CLAUDE.md, money-moving code is authored or reviewed by the
-project owner; these stubs pin the contracts and the Stripe
-mechanism so the bodies can be filled in deliberately. skeleton_02
-is the proven reference for the PaymentIntent create call.
+project owner: five of six operations are implemented under that
+review; refund_charge stays a guarded stub until walk-ins ship.
+skeleton_02 remains the proven reference for the PaymentIntent
+create call.
 
 Charge-at-close (decisions.md 2026-07-15) — no holds:
 - Save card: a SetupIntent at RSVP saves the attendee's card to a

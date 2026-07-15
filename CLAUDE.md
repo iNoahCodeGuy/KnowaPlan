@@ -80,10 +80,11 @@ pinned by tests/test_money_guard.py.
 ## How to work here
 - Payment and state-machine code is load-bearing: explain the
   mechanism and let me review or write it. Do not author it wholesale.
-  app/payments.py exposes the charge-at-close surface (setup-intent
-  save, charge_share, payment link + poll, refund) as stubs whose
-  bodies raise NotImplementedError — they get written with owner
-  review, mechanism documented in each docstring.
+  app/payments.py implements the charge-at-close surface
+  (setup-intent save, charge_share, payment link + poll), each
+  body written under owner review with its mechanism documented
+  in the docstring; refund_charge stays a stub raising
+  NotImplementedError until walk-ins ship.
 - Never call the live Stripe API in tests — use test tokens / a mock.
 - Align before acting (owner instruction, 2026-07-16): every design
   or shaping decision — behavior, contracts, docs, schema, process,

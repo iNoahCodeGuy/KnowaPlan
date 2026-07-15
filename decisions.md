@@ -408,3 +408,43 @@ live in a variable named "test", and the comment now pins the
 platform-vs-connected distinction: this is the account that
 RECEIVES money (transfer_data.destination), never the platform's
 own id — Stripe rejects a destination of self.
+
+## 2026-07-16: Demo-slice web layer — shape and guards
+**Context:** the web layer (capability URLs → pages → settle) was
+built step-by-step under align-before-acting; the grilled choices
+are consolidated here so they outlive the session log.
+**Shape:** server-rendered Jinja2 + form POSTs; the only browser
+JS is the /r/ Payment Element island, and it is LAZY — a
+SetupIntent is minted when the attendee taps "Add a card", never
+on page render (/r/ is the revisit-all-week page). RSVP entry is
+two-step — /e/ identifies by phone (get-or-create; re-entering a
+phone recovers a lost /r/ link without accounts), /r/ answers —
+because a card save needs an existing Attendee before the island
+can render. The planner row is get-or-created by phone from the
+create form; Connect onboarding stays a live-dogfood concern.
+Buttons on /r/ are derived from the transition table, so the UI
+can never offer an illegal move — a `going` attendee gets
+"text the planner", not a back-out button (going →
+attended|no_show only).
+**Money-relevant guards:**
+- A playing planner is auto-linked by phone match at RSVP
+  creation (sets Planner.attendee_id) — no UI, can't be
+  forgotten; this arms settle_event's never-charge-the-planner
+  skip (2026-07-16 settlement mechanics).
+- cancel_event refuses once ANY Payment row has left pristine
+  `none` (state changed or record-first stamp set): a crashed
+  settle can move money while the event is still `closed`, and
+  cancelling then would stamp "nothing charged" onto a lie.
+- The settle route accepts only an explicit mode (actual|cap);
+  the cap button renders ONLY when actual > estimate, labeled
+  with the absorbed total — silence charges actual (2026-07-15).
+- Tap-to-pay links are shown once (settle report / retry result)
+  and re-minted on demand — never stored (a Checkout URL goes
+  stale within ~24h and a stored one would lie) and never
+  re-fetched per roster load; one-payable-link-per-row stands
+  (2026-07-16).
+**Deferred, made explicit:** the maybe→declined auto-convert at
+event start (scenarios.md) is a TIMER job and defers with the
+scheduler (2026-07-13 deferred list, clarified here) — the settle
+preview warns about stale maybes instead; a maybe who played taps
+Going on their own link while the event is open.
