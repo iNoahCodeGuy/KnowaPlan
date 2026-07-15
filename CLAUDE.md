@@ -27,7 +27,8 @@ area, one known group. Custodies real money — correctness over speed.
 If a change would contradict any of these, stop and ask.
 ## Commands
 - Run app:       .venv/bin/uvicorn app.main:app --reload
-- Run skeleton:  python skeleton_02_payment.py
+- Run skeleton:  python skeleton_02_payment.py (hold-era proof;
+  see its header note)
 - Tests:         .venv/bin/pytest
 - Lint/format:   .venv/bin/ruff check . / .venv/bin/ruff format .
 - Dev deps:      pinned in requirements-dev.txt
@@ -62,11 +63,10 @@ A PreToolUse hook (.claude/hooks/money_guard.py, wired via
 .claude/settings.json) denies any .py edit that uses the Refund API
 without the marker `refund-guard: captured-only`. Refund stays
 reversal-of-a-collected-charge only, so that guard survives the
-2026-07-15 pivot. The hook's auth-expiry / settle-offset guard is now
-moot (no holds to expire) and will be retired when the payment code is
-reconciled — until then it may still fire on settle-scheduling edits.
-The guard fails closed; its behavior is pinned by
-tests/test_money_guard.py.
+2026-07-15 pivot. The hook's old auth-expiry / settle-offset guard
+was retired with the pivot (no holds to expire); settle-scheduling
+edits are no longer denied. The guard fails closed; its behavior is
+pinned by tests/test_money_guard.py.
 
 ## Code style
 - Type hints on every function signature.
@@ -77,7 +77,8 @@ tests/test_money_guard.py.
 ## How to work here
 - Payment and state-machine code is load-bearing: explain the
   mechanism and let me review or write it. Do not author it wholesale.
-  app/payments.py is being reworked from the hold model (authorize /
-  capture / void) to charge-at-close (charge-share / payment-link) —
-  those bodies get written with owner review.
+  app/payments.py exposes the charge-at-close surface (setup-intent
+  save, charge_share, payment link + poll, refund) as stubs whose
+  bodies raise NotImplementedError — they get written with owner
+  review, mechanism documented in each docstring.
 - Never call the live Stripe API in tests — use test tokens / a mock.

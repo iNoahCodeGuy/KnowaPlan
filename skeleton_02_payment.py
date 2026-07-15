@@ -1,7 +1,16 @@
 """
 Walking skeleton, step 2: prove the full Stripe payment plumbing.
 
-Flow:
+HOLD-ERA ARTIFACT — superseded by charge-at-close (decisions.md
+2026-07-15). The authorize-then-capture flow below is NO LONGER the
+product's money model. It stays as the proven reference for the
+Connect wiring that survived the pivot: platform-side Customer,
+on_behalf_of=planner, transfer_data.destination=planner. The next
+skeleton to prove is charge-at-close — SetupIntent (save card at
+RSVP) → off-session PaymentIntent (charge share at close) — per the
+contracts in app/payments.py.
+
+Flow (historical):
   1. Create a Customer (the attendee)
   2. Authorize $40 worst-case using a test payment token (the RSVP moment)
   3. Capture $32 actual share (the post-attendance moment)

@@ -3,8 +3,8 @@ Walking skeleton, step 1: prove we can authenticate to Stripe and
 reach our test connected account.
 
 Purpose: if auth or the account ID is wrong, every downstream step
-(Customer, PaymentIntent, capture) will fail with confusing errors.
-Catch the foundation problems here, in isolation.
+(Customer, SetupIntent, PaymentIntent) will fail with confusing
+errors. Catch the foundation problems here, in isolation.
 """
 
 import os
