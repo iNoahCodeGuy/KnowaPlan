@@ -26,10 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
-from app.events import open_rsvps
+from app.events import cancel_event, open_rsvps
 from app.models import Attendee, Event, Payment, Planner, Rsvp
 from app.payments import (
     CardSaveFailed,
+    create_payment_link,
     create_setup_intent,
     poll_link_status,
     record_saved_card,
@@ -39,6 +40,12 @@ from app.rsvps import (
     allowed_choices,
     get_or_create_rsvp,
     respond,
+)
+from app.settlement import (
+    close_rsvps,
+    mark_attendance,
+    retry_dangling,
+    settle_event,
 )
 
 router = APIRouter()
@@ -541,3 +548,337 @@ async def setup_intent_endpoint(
         )
     await session.commit()  # persist stripe_customer_id
     return JSONResponse({"client_secret": secret})
+
+
+def _settle_math(
+    event: Event,
+    rows: list[tuple[Rsvp, Attendee]],
+    planner: Planner,
+) -> dict[str, object]:
+    """Read-only mirror of settle_event's selection rules
+    (app/settlement.py) — participants, share, and the warnings
+    the preview owes the planner. If settle_event's rules ever
+    change, change this WITH it; the preview must never promise a
+    different split than the settle performs."""
+    assume = event.settle_default == "assume_all_attended"
+    participants: list[Attendee] = []
+    unmarked = 0
+    maybes = 0
+    for rsvp, attendee in rows:
+        undecided = (
+            rsvp.state == "going"
+            and rsvp.attendance == "unconfirmed"
+        )
+        if rsvp.attendance == "present":
+            participants.append(attendee)
+        elif undecided:
+            unmarked += 1
+            if assume:
+                participants.append(attendee)
+        elif rsvp.state == "maybe":
+            maybes += 1
+    divisor = len(participants)
+    share = event.total_cost_cents // divisor if divisor else 0
+    planner_playing = any(
+        attendee.id == planner.attendee_id
+        for attendee in participants
+    )
+    chargeable = divisor - (1 if planner_playing else 0)
+    over = share > event.estimated_share_cents
+    return {
+        "participants": divisor,
+        "share": share,
+        "chargeable": chargeable,
+        "unmarked": unmarked,
+        "maybes": maybes,
+        "planner_playing": planner_playing,
+        "over_estimate": over,
+        "capped_shortfall": (
+            (share - event.estimated_share_cents) * chargeable
+            if over
+            else 0
+        ),
+        "assume": assume,
+    }
+
+
+async def _event_rows(
+    session: AsyncSession, event: Event
+) -> list[tuple[Rsvp, Attendee]]:
+    return list(
+        (
+            await session.execute(
+                select(Rsvp, Attendee)
+                .join(Attendee, Rsvp.attendee_id == Attendee.id)
+                .where(Rsvp.event_id == event.id)
+                .order_by(Attendee.name)
+            )
+        ).all()
+    )
+
+
+@router.post("/admin/{token}/close")
+async def close_event_route(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    try:
+        await close_rsvps(session, event)
+    except ValueError:
+        return _cannot(
+            request,
+            f"RSVPs can't close from state {event.state!r}.",
+        )
+    return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@router.post("/admin/{token}/attendance")
+async def mark_attendance_route(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+    rsvp_id: int = Form(...),
+    present: str = Form(...),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    rsvp = await session.get(Rsvp, rsvp_id)
+    if rsvp is None or rsvp.event_id != event.id:
+        # An admin link must never reach into another event.
+        return _not_found(request)
+    if present not in ("yes", "no"):
+        return _cannot(request, "present must be yes or no")
+    if event.state not in ("open", "closed"):
+        return _cannot(
+            request,
+            f"attendance can't change once the event is "
+            f"{event.state} (the 72h re-mark ships with refunds)",
+        )
+    if event.state == "open":
+        # Marking begins => RSVPs close (state_machines.md).
+        await close_rsvps(session, event)
+    try:
+        await mark_attendance(session, rsvp, present == "yes")
+    except ValueError:
+        return _cannot(
+            request,
+            "only a `going` answer can be marked — a maybe has "
+            "to tap Going on their own link first, and a marked "
+            "row stays marked (re-marking ships with refunds)",
+        )
+    return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@router.get("/admin/{token}/cancel")
+async def cancel_confirm(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    return templates.TemplateResponse(
+        request, "cancel_confirm.html", {"event": event}
+    )
+
+
+@router.post("/admin/{token}/cancel")
+async def cancel_route(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    try:
+        await cancel_event(session, event)
+    except ValueError as err:
+        return _cannot(request, str(err))
+    return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@router.post("/admin/{token}/retry/{payment_id}")
+async def retry_route(
+    request: Request,
+    token: str,
+    payment_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    payment = await session.get(Payment, payment_id)
+    if payment is None or payment.event_id != event.id:
+        return _not_found(request)
+    attendee = await session.get(Attendee, payment.attendee_id)
+    planner = await session.get(Planner, event.planner_id)
+    if attendee is None or planner is None:
+        return _not_found(request)
+    try:
+        outcome = await retry_dangling(
+            session, payment, attendee, planner
+        )
+    except ValueError as err:
+        return _cannot(request, str(err))
+    except (stripe.StripeError, RuntimeError):
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {
+                "message": "Stripe is unreachable — the row stays "
+                "flagged, and retrying again is safe (same "
+                "idempotency key, decisions.md 2026-07-13).",
+            },
+            status_code=502,
+        )
+    return templates.TemplateResponse(
+        request,
+        "link_result.html",
+        {
+            "event": event,
+            "attendee": attendee,
+            "outcome": outcome.result,
+            "link_url": outcome.link_url,
+            "amount_cents": payment.charge_requested_cents,
+            "token": token,
+        },
+    )
+
+
+@router.post("/admin/{token}/link/{payment_id}")
+async def fresh_link_route(
+    request: Request,
+    token: str,
+    payment_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    payment = await session.get(Payment, payment_id)
+    if payment is None or payment.event_id != event.id:
+        return _not_found(request)
+    if payment.charge_requested_cents is None:
+        return _cannot(request, "this row has no stamped amount")
+    attendee = await session.get(Attendee, payment.attendee_id)
+    planner = await session.get(Planner, event.planner_id)
+    if attendee is None or planner is None:
+        return _not_found(request)
+    try:
+        # Always the STAMPED amount — a re-mint is the same debt,
+        # never a recompute (decisions.md 2026-07-16).
+        url = await create_payment_link(
+            payment, planner, payment.charge_requested_cents
+        )
+    except ValueError as err:
+        # e.g. the old link already collected — the next roster
+        # load's poll reconciles it.
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {"message": f"{err} — reload the roster."},
+            status_code=409,
+        )
+    except stripe.StripeError:
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {"message": "Stripe is unreachable — try again."},
+            status_code=502,
+        )
+    await session.commit()  # the row now points at the new session
+    return templates.TemplateResponse(
+        request,
+        "link_result.html",
+        {
+            "event": event,
+            "attendee": attendee,
+            "outcome": "unpaid",
+            "link_url": url,
+            "amount_cents": payment.charge_requested_cents,
+            "token": token,
+        },
+    )
+
+
+@router.get("/admin/{token}/settle")
+async def settle_preview(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    if event.state not in ("open", "closed"):
+        return _cannot(
+            request,
+            f"can't settle an event that is {event.state}",
+        )
+    planner = await session.get(Planner, event.planner_id)
+    if planner is None:
+        return _not_found(request)
+    rows = await _event_rows(session, event)
+    math = _settle_math(event, rows, planner)
+    return templates.TemplateResponse(
+        request,
+        "settle_preview.html",
+        {"event": event, "planner": planner, **math},
+    )
+
+
+@router.post("/admin/{token}/settle")
+async def settle_route(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+    mode: str = Form(...),
+) -> Response:
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    if mode not in ("actual", "cap"):
+        # Absorbing is an ACTIVE choice; anything ambiguous is
+        # refused rather than defaulted (decisions.md 2026-07-15).
+        return _cannot(request, "mode must be actual or cap")
+    planner = await session.get(Planner, event.planner_id)
+    if planner is None:
+        return _not_found(request)
+    try:
+        report = await settle_event(
+            session,
+            event,
+            planner,
+            cap_at_estimate=(mode == "cap"),
+        )
+    except ValueError as err:
+        return _cannot(request, str(err))
+    rows = await _event_rows(session, event)
+    attendees_by_id = {a.id: a for _, a in rows}
+    payments_by_attendee = {
+        p.attendee_id: p
+        for p in (
+            await session.execute(
+                select(Payment).where(
+                    Payment.event_id == event.id
+                )
+            )
+        ).scalars()
+    }
+    return templates.TemplateResponse(
+        request,
+        "settle_report.html",
+        {
+            "event": event,
+            "report": report,
+            "attendees_by_id": attendees_by_id,
+            "payments_by_attendee": payments_by_attendee,
+        },
+    )

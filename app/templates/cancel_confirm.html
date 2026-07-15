@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Cancel — {{ event.title }}{% endblock %}
+{% block content %}
+<h1>Cancel {{ event.title }}?</h1>
+<p>Nothing has been charged (there are no holds to release —
+charge-at-close). Everyone's link will show the event as
+cancelled.</p>
+<form method="post" action="/admin/{{ event.admin_token }}/cancel">
+  <button>Yes — cancel the event</button>
+</form>
+<p><a href="/admin/{{ event.admin_token }}">Back to the
+roster</a></p>
+{% endblock %}
