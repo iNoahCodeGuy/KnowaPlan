@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool
 
 from app.models import Base
 
@@ -48,7 +49,12 @@ async def db_session() -> AsyncIterator[AsyncSession]:
     ordering is tested against real commits, hermetically. SQLite
     stores tz-naive datetimes — fine for ordering tests; Postgres
     fidelity comes with live dogfood (decisions.md 2026-07-16)."""
-    engine = create_async_engine("sqlite+aiosqlite://")
+    # StaticPool pins ONE connection: an in-memory SQLite database
+    # lives per connection, and a second pooled connection would be
+    # a second, empty database.
+    engine = create_async_engine(
+        "sqlite+aiosqlite://", poolclass=StaticPool
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     maker = async_sessionmaker(engine, expire_on_commit=False)
