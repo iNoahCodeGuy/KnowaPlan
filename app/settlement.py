@@ -10,6 +10,7 @@ app/state_machines.py — an illegal transition raises, never writes.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +101,59 @@ def _resolve_attendance(rsvp: Rsvp, present: bool) -> None:
     )
 
 
+async def _collect(
+    session: AsyncSession,
+    payment: Payment,
+    attendee: Attendee,
+    planner: Planner,
+    cents: int,
+) -> Outcome:
+    """Collect one stamped row: saved card first, link fallback.
+    A decline is an outcome (unpaid + link minted right away — the
+    link is THE recovery, state_machines.md); an API error
+    propagates and the CALLER decides what dangling means."""
+    if attendee.stripe_payment_method_id is not None:
+        await charge_share(payment, attendee, planner, cents)
+        await session.commit()
+        if payment.state == "paid":
+            return Outcome(attendee.id, "paid")
+        # declined: charge_share already wrote unpaid + reason
+    else:
+        payment.state = _transition(
+            PAYMENT, "payment", payment.state, "unpaid"
+        )
+        payment.state_reason = "no_card"
+        await session.commit()
+    url = await create_payment_link(payment, planner, cents)
+    await session.commit()
+    return Outcome(attendee.id, "unpaid", link_url=url)
+
+
+async def retry_dangling(
+    session: AsyncSession,
+    payment: Payment,
+    attendee: Attendee,
+    planner: Planner,
+) -> Outcome:
+    """Retry a dangling charge with the STAMPED amount — identical
+    params by construction, so Stripe replays the original outcome
+    and the books converge (decisions.md 2026-07-13/16). A Stripe
+    error propagates: the row stays dangling, visibly."""
+    if (
+        payment.state != "none"
+        or payment.charge_requested_at is None
+        or payment.charge_requested_cents is None
+    ):
+        raise ValueError("not a dangling charge")
+    return await _collect(
+        session,
+        payment,
+        attendee,
+        planner,
+        payment.charge_requested_cents,
+    )
+
+
 async def settle_event(
     session: AsyncSession,
     event: Event,
@@ -157,6 +211,19 @@ async def settle_event(
     if cap_at_estimate:
         charge = min(share, event.estimated_share_cents)
 
+    # Rows a previous (crashed) run may have left — keyed by
+    # attendee alone: attempt is always 1 until walk-ins ship.
+    existing = {
+        p.attendee_id: p
+        for p in (
+            await session.execute(
+                select(Payment).where(
+                    Payment.event_id == event.id
+                )
+            )
+        ).scalars()
+    }
+
     charged = [
         (rsvp, attendee)
         for rsvp, attendee in participants
@@ -164,39 +231,52 @@ async def settle_event(
     ]
     outcomes: list[Outcome] = []
     for rsvp, attendee in charged:
-        # Record-first: intent (row + when + how much) and any
-        # defaulted attendance resolution are durable BEFORE the
-        # money moves.
-        if rsvp.attendance == "unconfirmed":
-            _resolve_attendance(rsvp, present=True)
-        payment = Payment(
-            event_id=event.id,
-            attendee_id=attendee.id,
-            attempt=1,
-            state="none",
-            charge_requested_at=datetime.now(timezone.utc),
-            charge_requested_cents=charge,
-        )
-        session.add(payment)
-        await session.commit()
-
-        if attendee.stripe_payment_method_id is not None:
-            await charge_share(payment, attendee, planner, charge)
-            await session.commit()
-            outcomes.append(Outcome(attendee.id, payment.state))
+        prior = existing.get(attendee.id)
+        if prior is not None and prior.state == "paid":
+            outcomes.append(Outcome(attendee.id, "paid"))
+            continue
+        if prior is not None and prior.state == "unpaid":
+            # Its stored link is still the live one — no re-mint
+            # here; the planner re-mints on demand.
+            outcomes.append(Outcome(attendee.id, "unpaid"))
+            continue
+        if prior is not None and prior.state != "none":
+            # refunded/abandoned: audit rows; a new attempt is
+            # walk-in territory (deferred).
+            continue
+        if prior is not None:
+            # Dangling from a crashed run: retry with the STAMPED
+            # amount, never a recompute.
+            payment = prior
+            cents = prior.charge_requested_cents or 0
         else:
-            payment.state = _transition(
-                PAYMENT, "payment", payment.state, "unpaid"
+            # Record-first: intent (row + when + how much) and any
+            # defaulted attendance resolution are durable BEFORE
+            # the money moves.
+            if rsvp.attendance == "unconfirmed":
+                _resolve_attendance(rsvp, present=True)
+            payment = Payment(
+                event_id=event.id,
+                attendee_id=attendee.id,
+                attempt=1,
+                state="none",
+                charge_requested_at=datetime.now(timezone.utc),
+                charge_requested_cents=charge,
             )
-            payment.state_reason = "no_card"
+            session.add(payment)
             await session.commit()
-            url = await create_payment_link(
-                payment, planner, charge
-            )
-            await session.commit()
+            cents = charge
+        try:
             outcomes.append(
-                Outcome(attendee.id, "unpaid", link_url=url)
+                await _collect(
+                    session, payment, attendee, planner, cents
+                )
             )
+        except (stripe.StripeError, RuntimeError):
+            # An API failure is contained per attendee: the row
+            # stays dangling (queryable, same-key retry) and the
+            # rest of the group still settles.
+            outcomes.append(Outcome(attendee.id, "dangling"))
 
     # A playing planner's own undecided attendance still resolves —
     # they participate, they just aren't charged.

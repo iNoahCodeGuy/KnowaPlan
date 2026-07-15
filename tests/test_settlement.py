@@ -505,3 +505,305 @@ class TestSettleEvent:
         assert all(
             p.charge_requested_cents == 3500 for p in payments
         )
+
+
+def _decline(mock_stripe: MagicMock) -> Exception:
+    """A real CardError shaped as the SDK ships it (payload on
+    err.error) — same shape test_payments pins."""
+    err = mock_stripe.CardError("declined", None, "card_declined")
+    err.error = SimpleNamespace(
+        decline_code="insufficient_funds",
+        payment_intent=SimpleNamespace(id="pi_declined"),
+    )
+    return err
+
+
+def _pi_by_customer(
+    mock_stripe: MagicMock, failures: dict[str, Exception]
+) -> AsyncMock:
+    """Succeed per customer unless a failure is scripted — keyed by
+    customer id, not call order, so row ordering can't flake."""
+
+    def _create(**kwargs: Any) -> SimpleNamespace:
+        customer = kwargs["customer"]
+        if customer in failures:
+            raise failures[customer]
+        return SimpleNamespace(
+            id=f"pi_{customer}", status="succeeded"
+        )
+
+    return AsyncMock(side_effect=_create)
+
+
+class TestSettleFailures:
+    async def test_decline_mid_settle_links_and_continues(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """One friend's card declines: they land unpaid with the
+        reason AND a link minted in-settle; the other friend is
+        still charged; the event still settles."""
+        event = await _seed_event(db_session)
+        await _seed_present_carded(db_session, event, "+15550000001")
+        await _seed_present_carded(db_session, event, "+15550000003")
+        planner = await db_session.get(Planner, event.planner_id)
+        mock_stripe.PaymentIntent.create_async = _pi_by_customer(
+            mock_stripe, {"cus_1": _decline(mock_stripe)}
+        )
+        mock_stripe.checkout.Session.create_async = AsyncMock(
+            return_value=SimpleNamespace(
+                id="cs_1",
+                url="https://checkout.stripe.com/c/pay/cs_1",
+            )
+        )
+
+        report = await settle_event(db_session, event, planner)
+
+        by_result = {o.result: o for o in report.outcomes}
+        assert set(by_result) == {"paid", "unpaid"}
+        assert by_result["unpaid"].link_url is not None
+        unpaid = [
+            p
+            for p in await _payments(db_session)
+            if p.state == "unpaid"
+        ]
+        assert unpaid[0].state_reason == "insufficient_funds"
+        assert unpaid[0].stripe_checkout_session_id == "cs_1"
+        await db_session.refresh(event)
+        assert event.state == "settled"
+
+    async def test_api_error_mid_settle_dangles_and_continues(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """An API blip on one row: it stays dangling (state none,
+        stamps intact), the report says so, the others charge, the
+        event still settles."""
+        event = await _seed_event(db_session)
+        await _seed_present_carded(db_session, event, "+15550000001")
+        await _seed_present_carded(db_session, event, "+15550000003")
+        planner = await db_session.get(Planner, event.planner_id)
+        mock_stripe.PaymentIntent.create_async = _pi_by_customer(
+            mock_stripe,
+            {"cus_1": mock_stripe.StripeError("api blip")},
+        )
+
+        report = await settle_event(db_session, event, planner)
+
+        results = sorted(o.result for o in report.outcomes)
+        assert results == ["dangling", "paid"]
+        dangling = [
+            p
+            for p in await _payments(db_session)
+            if p.state == "none"
+        ]
+        assert len(dangling) == 1
+        assert dangling[0].charge_requested_at is not None
+        assert dangling[0].charge_requested_cents == 6000
+        await db_session.refresh(event)
+        assert event.state == "settled"
+
+    async def test_rerun_retries_dangling_with_stamped_cents(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """A crashed run left one paid row and one dangling row
+        stamped at 5900 (≠ any recompute). Re-settle: the paid row
+        gets NO Stripe call, the dangling row is charged EXACTLY
+        the stamp, no duplicate rows."""
+        event = await _seed_event(db_session, state="closed")
+        paid_rsvp = await _seed_present_carded(
+            db_session, event, "+15550000001"
+        )
+        dang_rsvp = await _seed_present_carded(
+            db_session, event, "+15550000003"
+        )
+        planner = await db_session.get(Planner, event.planner_id)
+        db_session.add_all(
+            [
+                Payment(
+                    event_id=event.id,
+                    attendee_id=paid_rsvp.attendee_id,
+                    attempt=1,
+                    state="paid",
+                    charged_cents=6000,
+                    stripe_payment_intent_id="pi_done",
+                    charge_requested_at=STARTS_AT,
+                    charge_requested_cents=6000,
+                ),
+                Payment(
+                    event_id=event.id,
+                    attendee_id=dang_rsvp.attendee_id,
+                    attempt=1,
+                    state="none",
+                    charge_requested_at=STARTS_AT,
+                    charge_requested_cents=5900,
+                ),
+            ]
+        )
+        await db_session.commit()
+        mock_stripe.PaymentIntent.create_async = _succeeding_pi()
+
+        report = await settle_event(db_session, event, planner)
+
+        assert sorted(o.result for o in report.outcomes) == [
+            "paid",
+            "paid",
+        ]
+        calls = (
+            mock_stripe.PaymentIntent.create_async.await_args_list
+        )
+        assert len(calls) == 1
+        assert calls[0].kwargs["amount"] == 5900
+        assert len(await _payments(db_session)) == 2
+        await db_session.refresh(event)
+        assert event.state == "settled"
+
+    async def test_rerun_skips_unpaid_without_reminting(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """An unpaid row keeps its live link on re-run: no charge,
+        no re-mint, session id untouched."""
+        event = await _seed_event(db_session, state="closed")
+        rsvp = await _seed_present_carded(
+            db_session, event, "+15550000001"
+        )
+        planner = await db_session.get(Planner, event.planner_id)
+        db_session.add(
+            Payment(
+                event_id=event.id,
+                attendee_id=rsvp.attendee_id,
+                attempt=1,
+                state="unpaid",
+                state_reason="insufficient_funds",
+                stripe_checkout_session_id="cs_live",
+                charge_requested_at=STARTS_AT,
+                charge_requested_cents=6000,
+            )
+        )
+        await db_session.commit()
+        mock_stripe.PaymentIntent.create_async = AsyncMock()
+        mock_stripe.checkout.Session.create_async = AsyncMock()
+        mock_stripe.checkout.Session.expire_async = AsyncMock()
+
+        report = await settle_event(db_session, event, planner)
+
+        assert [o.result for o in report.outcomes] == ["unpaid"]
+        assert report.outcomes[0].link_url is None
+        mock_stripe.PaymentIntent.create_async.assert_not_awaited()
+        create = mock_stripe.checkout.Session.create_async
+        create.assert_not_awaited()
+        payments = await _payments(db_session)
+        session_id = payments[0].stripe_checkout_session_id
+        assert session_id == "cs_live"
+
+    @pytest.mark.parametrize(
+        "state", ["draft", "settled", "cancelled"]
+    )
+    async def test_settle_from_wrong_state_refuses(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    , state: str) -> None:
+        event = await _seed_event(db_session, state=state)
+        planner = await db_session.get(Planner, event.planner_id)
+
+        with pytest.raises(ValueError):
+            await settle_event(db_session, event, planner)
+        assert event.state == state
+
+
+class TestRetryDangling:
+    async def _dangling(
+        self, session: AsyncSession, *, carded: bool = True
+    ) -> tuple[Payment, Attendee, Planner]:
+        event = await _seed_event(session, state="closed")
+        rsvp = (
+            await _seed_present_carded(
+                session, event, "+15550000001"
+            )
+            if carded
+            else await _seed_rsvp(
+                session,
+                event,
+                phone="+15550000001",
+                state="attended",
+                attendance="present",
+            )
+        )
+        payment = Payment(
+            event_id=event.id,
+            attendee_id=rsvp.attendee_id,
+            attempt=1,
+            state="none",
+            charge_requested_at=STARTS_AT,
+            charge_requested_cents=3200,
+        )
+        session.add(payment)
+        await session.commit()
+        attendee = await session.get(Attendee, rsvp.attendee_id)
+        planner = await session.get(Planner, event.planner_id)
+        assert attendee is not None and planner is not None
+        return payment, attendee, planner
+
+    async def test_retry_charges_the_stamped_amount(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        from app.settlement import retry_dangling
+
+        payment, attendee, planner = await self._dangling(
+            db_session
+        )
+        mock_stripe.PaymentIntent.create_async = _succeeding_pi()
+
+        outcome = await retry_dangling(
+            db_session, payment, attendee, planner
+        )
+
+        assert outcome.result == "paid"
+        assert payment.state == "paid"
+        calls = (
+            mock_stripe.PaymentIntent.create_async.await_args_list
+        )
+        assert calls[0].kwargs["amount"] == 3200
+
+    async def test_retry_refuses_non_dangling_rows(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        from app.settlement import retry_dangling
+
+        payment, attendee, planner = await self._dangling(
+            db_session
+        )
+        payment.state = "unpaid"
+        await db_session.commit()
+        mock_stripe.PaymentIntent.create_async = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await retry_dangling(
+                db_session, payment, attendee, planner
+            )
+        mock_stripe.PaymentIntent.create_async.assert_not_awaited()
+
+    async def test_retry_cardless_dangling_mints_link(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        from app.settlement import retry_dangling
+
+        payment, attendee, planner = await self._dangling(
+            db_session, carded=False
+        )
+        mock_stripe.checkout.Session.create_async = AsyncMock(
+            return_value=SimpleNamespace(
+                id="cs_9",
+                url="https://checkout.stripe.com/c/pay/cs_9",
+            )
+        )
+
+        outcome = await retry_dangling(
+            db_session, payment, attendee, planner
+        )
+
+        assert outcome.result == "unpaid"
+        assert (
+            outcome.link_url
+            == "https://checkout.stripe.com/c/pay/cs_9"
+        )
+        assert payment.state == "unpaid"
+        assert payment.state_reason == "no_card"
+        assert payment.stripe_checkout_session_id == "cs_9"
