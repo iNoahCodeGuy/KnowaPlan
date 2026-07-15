@@ -94,3 +94,7 @@ pinned by tests/test_money_guard.py.
   If a turn ends mid-step, checkpoint suite-green (pending tests
   xfail strict=true, unwritten bodies still raising) and say
   what is pending.
+- Explanations are written for a junior developer (owner
+  instruction, 2026-07-16): plain language, define terms,
+  concrete scenarios over abstractions — in walkthroughs,
+  grilling sessions, and step reports alike.
