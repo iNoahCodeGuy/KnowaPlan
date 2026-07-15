@@ -82,3 +82,15 @@ pinned by tests/test_money_guard.py.
   bodies raise NotImplementedError — they get written with owner
   review, mechanism documented in each docstring.
 - Never call the live Stripe API in tests — use test tokens / a mock.
+- Align before acting (owner instruction, 2026-07-16): every design
+  or shaping decision — behavior, contracts, docs, schema, process,
+  names, defaults, wording — is put to the owner with a
+  recommendation BEFORE any file changes. Design forks one at a
+  time; independent shaping details as a numbered list. A step
+  opens with the full walkthrough (mechanism, exact body draft,
+  test list, shaping list); files change only after alignment.
+  Mechanics of an approved step (running tests, applying the
+  previewed edit, its commit/push) proceed under that approval.
+  If a turn ends mid-step, checkpoint suite-green (pending tests
+  xfail strict=true, unwritten bodies still raising) and say
+  what is pending.
