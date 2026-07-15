@@ -33,19 +33,21 @@ Invariants every body must keep:
   retry of the SAME operation reuses its key and cannot double-move.
   Link creation is the exception — a Checkout Session expires, so a
   fixed key would replay a dead session (see create_payment_link).
-- Record-first: charge_share stamps payment.charge_requested_at in
-  the same DB transaction as the attendance change, BEFORE the
-  Stripe call; the terminal state (paid/unpaid) is written after. A
-  dangling charge (stamp set, state still `none`) is queryable and
-  retried with the SAME idempotency key. The DB must always know at
-  least as much as Stripe.
+- Record-first: the CALLER stamps charge_requested_at AND
+  charge_requested_cents (intent = when and how much — decisions.md
+  2026-07-16) in the same DB transaction as the attendance change,
+  BEFORE calling charge_share; the terminal state (paid/unpaid) is
+  written after. A dangling charge (stamp set, state still `none`)
+  is queryable and retried with the SAME idempotency key — and
+  identical params by construction, so Stripe replays the original
+  outcome. The DB must always know at least as much as Stripe.
 - Never call the live Stripe API in tests — inject a mock (conftest
   mock_stripe).
 """
 import stripe
 
 from app.config import get_settings
-from app.models import Attendee, Payment
+from app.models import Attendee, Payment, Planner
 
 
 class CardSaveFailed(Exception):
@@ -109,14 +111,23 @@ async def record_saved_card(
     return attendee
 
 
-async def charge_share(payment: Payment, actual_cents: int) -> Payment:
+async def charge_share(
+    payment: Payment,
+    attendee: Attendee,
+    planner: Planner,
+    actual_cents: int,
+) -> Payment:
     """Charge the saved card at close: Payment none -> paid, or
-    none -> unpaid on a decline. Off-session PaymentIntent
+    none -> unpaid on a decline. Fires from `none` ONLY — the
+    tap-to-pay link is the sole recovery from `unpaid`
+    (decisions.md 2026-07-16). Off-session PaymentIntent
     (confirm=True, immediate capture, on_behalf_of and
     transfer_data.destination = planner), idempotency key
     "{payment.id}:charge". Record-first: the caller stamps
-    charge_requested_at with the attendance change BEFORE this call;
-    this writes the terminal state after Stripe answers."""
+    charge_requested_at AND charge_requested_cents with the
+    attendance change BEFORE this call; this refuses a missing
+    stamp or a drifted amount, and writes the terminal state after
+    Stripe answers. A declined PI is recorded on the row."""
     raise NotImplementedError("author with review — CLAUDE.md")
 
 
