@@ -27,6 +27,8 @@ area, one known group. Custodies real money — correctness over speed.
 If a change would contradict any of these, stop and ask.
 ## Commands
 - Run app:       .venv/bin/uvicorn app.main:app --reload
+- Create tables: .venv/bin/python -m app.bootstrap (create_all
+  only — after a model change, drop/recreate the dev DB, re-run)
 - Run skeleton:  python skeleton_02_payment.py (hold-era proof;
   see its header note)
 - Tests:         .venv/bin/pytest

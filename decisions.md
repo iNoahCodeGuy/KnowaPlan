@@ -358,3 +358,32 @@ re-marking (needs refunds — ships with walk-ins), walk-ins, the
 **Testing:** transactional behavior is pinned against in-memory
 SQLite (aiosqlite, dev-only) — real commits, still hermetic;
 Postgres fidelity arrives with live dogfood.
+
+## 2026-07-16: Capability-URL schema — token grain and DB bootstrap
+**Context:** implementing the capability URLs (2026-07-13) for the
+demo web layer forced two decisions; grilled and aligned with the
+owner before any code.
+**1. The RSVP capability is per attendee PER EVENT.** rsvp_token
+lives on the Rsvp row, not the Attendee. "Per-attendee link minted
+at RSVP" read either way; on the Attendee, one leaked or forwarded
+link would change that person's RSVPs for EVERY event, past and
+future — the same credential authorizing many contexts, eroding
+one-token-per-purpose. On the Rsvp row a link controls exactly one
+event's answer, and a returning attendee gets a fresh link per
+event. Re-entering a phone on /e/ finds the same row again, so a
+lost /r/ link is recoverable without accounts.
+**2. Schema bootstrap is an explicit command, not startup magic.**
+`python -m app.bootstrap` runs metadata.create_all; the app never
+touches schema on boot. create_all only ADDS tables — it cannot
+ALTER — so the dev reset story after a model change is
+drop/recreate, documented beside the command. Alembic (real
+migrations) arrives at live dogfood, when data must survive schema
+changes.
+**Mechanism:** secrets.token_urlsafe(16) — ~128-bit, 22 URL-safe
+chars — as a Python-side column default, so an insert cannot forget
+to mint. One column per purpose (events.event_token,
+events.admin_token, rsvps.rsvp_token); each route queries ONLY its
+own column, making cross-purpose reuse structurally impossible. No
+collision-retry loop: the unique index converts astronomically-
+unlikely (birthday bound ~1e-27 at a million rows) into
+loudly-enforced.
