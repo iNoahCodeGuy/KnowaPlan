@@ -76,14 +76,18 @@ Transitions:
 - unpaid → abandoned: planner stops chasing
 - paid → refunded: reverse a collected charge
 
-A charge that lands `unpaid` and is later retried is the SAME Payment
-row (same idempotency key on retry); a genuinely new attempt (e.g. a
-re-added attendee) is a new row with the next attempt number
-(decisions.md 2026-07-08, still in force).
+A charge that lands `unpaid` is collected via the tap-to-pay link on
+the SAME Payment row — the saved card is never re-fired for this row
+(the link is the only recovery; decisions.md 2026-07-16). "Same
+idempotency key on retry" applies to the dangling case only: stamp
+set, Stripe never answered. A genuinely new attempt (e.g. a re-added
+attendee) is a new row with the next attempt number (decisions.md
+2026-07-08, still in force).
 
 Mechanism — record-first (decisions.md 2026-07-13, adapted): the
-charge stamps intent (a charge-requested timestamp) in the same DB
-transaction as the matching attendance change, BEFORE the Stripe call;
+charge stamps intent (a charge-requested timestamp and the intended
+amount — decisions.md 2026-07-16) in the same DB transaction as the
+matching attendance change, BEFORE the Stripe call;
 the terminal state is written after Stripe answers. A dangling charge
 (stamp set, state still none) is queryable, surfaced to the planner,
 and retried with the SAME idempotency key. The DB always knows at

@@ -289,3 +289,40 @@ app/models.py, the money_guard hook, and the test suite still encode
 the hold model and must be reconciled under owner review (CLAUDE.md:
 money + state-machine code is author-with-review). This entry and the
 canonical docs move first; the code follows deliberately.
+
+## 2026-07-16: Charge-at-close mechanism refinements
+**Context:** implementing the app/payments.py bodies surfaced four
+mechanism gaps the 2026-07-15 pivot left open. Settled here, before
+the code; each one is a money invariant.
+**1. charge_share fires from `none` only.** A saved card is charged
+once per Payment row. After a decline (`unpaid`) the tap-to-pay link
+is the ONLY recovery — never a saved-card re-fire, which would need
+a second idempotency key and so contradict the (payment.id,
+operation) rule; within Stripe's ~24h replay window it would
+silently return the original decline anyway. The fixed
+"{payment.id}:charge" key stays coherent: a dangling retry replays
+the original outcome.
+**2. One payable link per Payment row.** A Checkout Session stays
+payable ~24h and poll_link_status watches only the STORED session
+id, so re-minting would leave the old link live-but-unwatched — an
+attendee could pay a link the DB no longer knows (double collection;
+roster wrongly unpaid). create_payment_link retires the old session
+first: retrieve it; if already paid, REFUSE to mint (poll and
+reconcile — money already moved); if still open, expire it; then
+create the new one.
+**3. A declined PaymentIntent is recorded.** An off-session decline
+still creates a PI at Stripe, and the DB must know at least as much
+as Stripe (2026-07-13). stripe_payment_intent_id now means "latest
+charge attempt" — set from the error payload on a decline,
+overwritten by the collecting PI when the link pays. Payment
+`state`, never this column, gates refunds.
+**4. The record-first stamp includes the amount.** Stripe replays an
+idempotency key only for IDENTICAL params; a dangling retry with a
+recomputed (drifted) amount raises IdempotencyError forever while
+Stripe may hold collected money the DB never learns about. New
+column charge_requested_cents, stamped in the same txn as
+charge_requested_at; charge_share refuses when the passed amount
+differs from the stamp. Intent = when AND how much.
+**Locks in:** the guards in app/payments.py; the
+charge_requested_cents column; the state_machines.md clarification
+of the "retried" sentence.

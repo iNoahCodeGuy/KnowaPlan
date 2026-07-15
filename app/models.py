@@ -142,8 +142,10 @@ class Payment(Base):
     # Payment machine: none/paid/unpaid/refunded/abandoned
     # (charge-at-close, decisions.md 2026-07-15)
     state: Mapped[str] = mapped_column(String(16), default="none")
-    # The charge PaymentIntent — from the off-session saved-card
-    # charge, or created when a tap-to-pay link is completed
+    # The LATEST charge attempt's PaymentIntent — the successful
+    # off-session charge, a recorded decline, or the link's PI once
+    # completed (decisions.md 2026-07-16). `state`, not this column,
+    # says whether money was collected.
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(
         String(64), unique=True
     )
@@ -162,6 +164,13 @@ class Payment(Base):
     # still `none` is a dangling charge, retried with the SAME
     # idempotency key (decisions.md 2026-07-13).
     charge_requested_at: Mapped[datetime | None]
+    # Intent includes the amount (decisions.md 2026-07-16): Stripe
+    # replays an idempotency key only for identical params, so a
+    # dangling retry must re-send exactly what was stamped. Written
+    # in the same txn as charge_requested_at.
+    charge_requested_cents: Mapped[int | None] = mapped_column(
+        BigInteger
+    )
     # Why a terminal/unpaid state was reached (no_card, declined,
     # abandoned, ...) — for the roster and support questions
     state_reason: Mapped[str | None] = mapped_column(Text)
