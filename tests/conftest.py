@@ -4,9 +4,19 @@ Rule (CLAUDE.md): tests never call the live Stripe API. Two layers:
 credentials are blanked for the whole test process, and payment
 tests take the `mock_stripe` fixture instead of the real SDK.
 """
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 
 import pytest
+import stripe as real_stripe
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import StaticPool
+
+from app.models import Base
 
 
 @pytest.fixture(autouse=True)
@@ -19,9 +29,35 @@ def no_live_stripe(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def mock_stripe() -> MagicMock:
-    """Stand-in for the stripe module: payment code under test gets
-    this injected, and assertions run against the recorded calls."""
+def mock_stripe(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Stand-in for the stripe module, injected into app.payments:
+    the code under test talks to this, and assertions run against
+    the recorded calls. except-clauses need REAL exception classes
+    (a MagicMock attribute cannot be caught), so those come from the
+    SDK — importing it makes no network call."""
     stripe = MagicMock(name="stripe")
     stripe.api_key = "sk_test_mocked"
+    stripe.CardError = real_stripe.CardError
+    stripe.StripeError = real_stripe.StripeError
+    monkeypatch.setattr("app.payments.stripe", stripe)
     return stripe
+
+
+@pytest.fixture
+async def db_session() -> AsyncIterator[AsyncSession]:
+    """Real async session on in-memory SQLite: record-first commit
+    ordering is tested against real commits, hermetically. SQLite
+    stores tz-naive datetimes — fine for ordering tests; Postgres
+    fidelity comes with live dogfood (decisions.md 2026-07-16)."""
+    # StaticPool pins ONE connection: an in-memory SQLite database
+    # lives per connection, and a second pooled connection would be
+    # a second, empty database.
+    engine = create_async_engine(
+        "sqlite+aiosqlite://", poolclass=StaticPool
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        yield session
+    await engine.dispose()
