@@ -226,23 +226,92 @@ async def charge_share(
 
 
 async def create_payment_link(
-    payment: Payment, actual_cents: int
+    payment: Payment, planner: Planner, actual_cents: int
 ) -> str:
     """Cardless / post-decline: open a one-time Checkout Session for
     the share (mode='payment', Connect wiring under
     payment_intent_data) and return its URL for the planner to text.
-    Store session.id on payment.stripe_checkout_session_id so
+    `unpaid` rows only. One payable link per row (decisions.md
+    2026-07-16): an already-stored session is retired first —
+    refused if it collected (poll must reconcile), expired if still
+    open. Store session.id on payment.stripe_checkout_session_id so
     poll_link_status can read it. Do NOT pin a fixed idempotency key
-    — a session expires and a reused key replays the dead one."""
-    raise NotImplementedError("author with review — CLAUDE.md")
+    — a session expires and a reused key replays the dead one. No
+    success_url: Stripe's hosted confirmation page suffices in v0."""
+    _validate_cents(actual_cents)
+    if payment.state != "unpaid":
+        raise ValueError(
+            "a tap-to-pay link is minted for 'unpaid' rows only"
+        )
+    _configure()
+    old_id = payment.stripe_checkout_session_id
+    if old_id is not None:
+        # One payable link per row (decisions.md 2026-07-16): a
+        # replaced link must die first, and a collected one must be
+        # reconciled by the poller, never papered over.
+        old = await stripe.checkout.Session.retrieve_async(old_id)
+        if old.payment_status == "paid":
+            raise ValueError(
+                "old link already collected — run poll_link_status "
+                "before re-minting"
+            )
+        if old.status == "open":
+            await stripe.checkout.Session.expire_async(old_id)
+    session = await stripe.checkout.Session.create_async(
+        mode="payment",
+        line_items=[
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": actual_cents,
+                    "product_data": {"name": "Your share"},
+                },
+                "quantity": 1,
+            }
+        ],
+        payment_intent_data={
+            "on_behalf_of": planner.stripe_account_id,
+            "transfer_data": {
+                "destination": planner.stripe_account_id,
+            },
+        },
+        metadata={
+            "payment_id": str(payment.id),
+            "event_id": str(payment.event_id),
+            "attendee_id": str(payment.attendee_id),
+        },
+    )
+    payment.stripe_checkout_session_id = session.id
+    return session.url
 
 
 async def poll_link_status(payment: Payment) -> Payment:
     """Roster-load reconciliation (option b, no webhook —
     decisions.md 2026-07-15): retrieve the Checkout Session and, if
-    payment_status == 'paid', move unpaid -> paid and record
-    charged_cents + the PaymentIntent id. A no-op once paid."""
-    raise NotImplementedError("author with review — CLAUDE.md")
+    payment_status == 'paid', move unpaid -> paid, record
+    charged_cents + the collecting PaymentIntent id (overwrites a
+    recorded decline PI — latest charge attempt), and clear
+    state_reason. No Stripe call unless the row is `unpaid` with a
+    stored session id. NOTE for the future abandon action: expire
+    any open link when abandoning, or a late payment on it would go
+    unseen by this guard."""
+    if (
+        payment.state != "unpaid"
+        or payment.stripe_checkout_session_id is None
+    ):
+        return payment
+    _configure()
+    session = await stripe.checkout.Session.retrieve_async(
+        payment.stripe_checkout_session_id
+    )
+    if session.payment_status != "paid":
+        return payment
+    _move(payment, "paid")
+    payment.charged_cents = session.amount_total
+    payment.stripe_payment_intent_id = session.payment_intent
+    # The decline/no-card reason is history once collected.
+    payment.state_reason = None
+    return payment
 
 
 async def refund_charge(payment: Payment, refund_cents: int) -> Payment:

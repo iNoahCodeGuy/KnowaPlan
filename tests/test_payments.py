@@ -17,7 +17,9 @@ from app.models import Attendee, Payment, Planner
 from app.payments import (
     CardSaveFailed,
     charge_share,
+    create_payment_link,
     create_setup_intent,
+    poll_link_status,
     record_saved_card,
 )
 
@@ -412,3 +414,253 @@ class TestChargeShare:
         assert payment.state == "none"
         assert payment.charged_cents is None
         assert payment.stripe_payment_intent_id is None
+
+
+def _unpaid_payment(**overrides: Any) -> Payment:
+    """A Payment that close left uncollected: the saved-card charge
+    declined (reason recorded) or there was no card. This is the
+    only state a tap-to-pay link is minted for."""
+    return _payment(
+        state="unpaid",
+        state_reason="insufficient_funds",
+        **overrides,
+    )
+
+
+def _checkout_session(**overrides: Any) -> SimpleNamespace:
+    fields: dict[str, Any] = {
+        "id": "cs_new",
+        "url": "https://checkout.stripe.com/c/pay/cs_new",
+        "status": "open",
+        "payment_status": "unpaid",
+        "amount_total": 3200,
+        "payment_intent": "pi_link",
+    }
+    fields.update(overrides)
+    return SimpleNamespace(**fields)
+
+
+class TestCreatePaymentLink:
+    async def test_mints_link_and_stores_session_id(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """The kwargs ARE the contract: one line item at the exact
+        share, Connect wiring under payment_intent_data, and NO
+        idempotency key — a dead session must never be replayed."""
+        payment = _unpaid_payment()
+        create = AsyncMock(return_value=_checkout_session())
+        mock_stripe.checkout.Session.create_async = create
+
+        url = await create_payment_link(payment, _planner(), 3200)
+
+        assert url == "https://checkout.stripe.com/c/pay/cs_new"
+        assert payment.stripe_checkout_session_id == "cs_new"
+        create.assert_awaited_once_with(
+            mode="payment",
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": 3200,
+                        "product_data": {"name": "Your share"},
+                    },
+                    "quantity": 1,
+                }
+            ],
+            payment_intent_data={
+                "on_behalf_of": "acct_9",
+                "transfer_data": {"destination": "acct_9"},
+            },
+            metadata={
+                "payment_id": "41",
+                "event_id": "11",
+                "attendee_id": "7",
+            },
+        )
+        assert (
+            "idempotency_key" not in create.await_args.kwargs
+        )
+
+    @pytest.mark.parametrize(
+        "state", ["none", "paid", "refunded", "abandoned"]
+    )
+    async def test_links_are_for_unpaid_rows_only(
+        self, mock_stripe: MagicMock, state: str
+    ) -> None:
+        payment = _payment(state=state)
+        mock_stripe.checkout.Session.create_async = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await create_payment_link(payment, _planner(), 3200)
+        mock_stripe.checkout.Session.create_async.assert_not_awaited()
+
+    async def test_reissue_expires_the_old_open_session(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """One payable link per row (decisions.md 2026-07-16): the
+        replaced link must die BEFORE the new one exists, or an
+        attendee could pay a link the DB no longer watches."""
+        payment = _unpaid_payment(
+            stripe_checkout_session_id="cs_old"
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock(
+            return_value=_checkout_session(
+                id="cs_old", status="open", payment_status="unpaid"
+            )
+        )
+        mock_stripe.checkout.Session.expire_async = AsyncMock()
+        mock_stripe.checkout.Session.create_async = AsyncMock(
+            return_value=_checkout_session()
+        )
+
+        url = await create_payment_link(payment, _planner(), 3200)
+
+        retrieve = mock_stripe.checkout.Session.retrieve_async
+        retrieve.assert_awaited_once_with("cs_old")
+        expire = mock_stripe.checkout.Session.expire_async
+        expire.assert_awaited_once_with("cs_old")
+        assert payment.stripe_checkout_session_id == "cs_new"
+        assert url == "https://checkout.stripe.com/c/pay/cs_new"
+
+    async def test_reissue_refuses_when_old_session_collected(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """Money already moved on the old link: refuse to mint —
+        poll_link_status must reconcile the row first. Never paper
+        over a collected charge."""
+        payment = _unpaid_payment(
+            stripe_checkout_session_id="cs_old"
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock(
+            return_value=_checkout_session(
+                id="cs_old",
+                status="complete",
+                payment_status="paid",
+            )
+        )
+        mock_stripe.checkout.Session.expire_async = AsyncMock()
+        mock_stripe.checkout.Session.create_async = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await create_payment_link(payment, _planner(), 3200)
+        mock_stripe.checkout.Session.expire_async.assert_not_awaited()
+        mock_stripe.checkout.Session.create_async.assert_not_awaited()
+        assert payment.stripe_checkout_session_id == "cs_old"
+
+    async def test_reissue_after_expiry_skips_the_expire_call(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """An already-expired session needs no expire call — just
+        mint the replacement."""
+        payment = _unpaid_payment(
+            stripe_checkout_session_id="cs_old"
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock(
+            return_value=_checkout_session(
+                id="cs_old",
+                status="expired",
+                payment_status="unpaid",
+            )
+        )
+        mock_stripe.checkout.Session.expire_async = AsyncMock()
+        mock_stripe.checkout.Session.create_async = AsyncMock(
+            return_value=_checkout_session()
+        )
+
+        await create_payment_link(payment, _planner(), 3200)
+
+        mock_stripe.checkout.Session.expire_async.assert_not_awaited()
+        assert payment.stripe_checkout_session_id == "cs_new"
+
+    async def test_invalid_cents_refused_before_stripe(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        payment = _unpaid_payment()
+        mock_stripe.checkout.Session.create_async = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await create_payment_link(payment, _planner(), 0)
+        mock_stripe.checkout.Session.create_async.assert_not_awaited()
+
+
+class TestPollLinkStatus:
+    async def test_paid_session_collects_the_row(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        """unpaid -> paid once Stripe says the session collected:
+        amount and the collecting PI recorded (overwriting the
+        declined PI — latest charge attempt), stale reason
+        cleared."""
+        payment = _unpaid_payment(
+            stripe_checkout_session_id="cs_1",
+            stripe_payment_intent_id="pi_declined",
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock(
+            return_value=_checkout_session(
+                id="cs_1",
+                status="complete",
+                payment_status="paid",
+                amount_total=3200,
+                payment_intent="pi_link",
+            )
+        )
+
+        result = await poll_link_status(payment)
+
+        assert result is payment
+        assert payment.state == "paid"
+        assert payment.charged_cents == 3200
+        assert payment.stripe_payment_intent_id == "pi_link"
+        assert payment.state_reason is None
+
+    async def test_unpaid_session_changes_nothing(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        payment = _unpaid_payment(
+            stripe_checkout_session_id="cs_1"
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock(
+            return_value=_checkout_session(
+                id="cs_1", payment_status="unpaid"
+            )
+        )
+
+        result = await poll_link_status(payment)
+
+        assert result is payment
+        assert payment.state == "unpaid"
+        assert payment.state_reason == "insufficient_funds"
+        assert payment.charged_cents is None
+
+    @pytest.mark.parametrize(
+        "state", ["none", "paid", "refunded", "abandoned"]
+    )
+    async def test_non_unpaid_rows_make_no_stripe_call(
+        self, mock_stripe: MagicMock, state: str
+    ) -> None:
+        """The roster is mostly settled rows; polling them would be
+        wasted requests — and a terminal row must never move."""
+        payment = _payment(
+            state=state, stripe_checkout_session_id="cs_1"
+        )
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock()
+
+        result = await poll_link_status(payment)
+
+        assert result is payment
+        assert payment.state == state
+        retrieve = mock_stripe.checkout.Session.retrieve_async
+        retrieve.assert_not_awaited()
+
+    async def test_no_stored_session_makes_no_stripe_call(
+        self, mock_stripe: MagicMock
+    ) -> None:
+        payment = _unpaid_payment()
+        mock_stripe.checkout.Session.retrieve_async = AsyncMock()
+
+        result = await poll_link_status(payment)
+
+        assert result is payment
+        assert payment.state == "unpaid"
+        retrieve = mock_stripe.checkout.Session.retrieve_async
+        retrieve.assert_not_awaited()

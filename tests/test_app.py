@@ -5,11 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models import Payment
-from app.payments import (
-    create_payment_link,
-    poll_link_status,
-    refund_charge,
-)
+from app.payments import refund_charge
 
 
 def test_health() -> None:
@@ -27,11 +23,7 @@ async def test_payment_stubs_are_unwritten() -> None:
     p = Payment()
     # Build each coroutine inside the loop: pre-building the tuple
     # would leak never-awaited coroutines if an early case fails
-    cases = (
-        (create_payment_link, (p, 3200)),
-        (poll_link_status, (p,)),
-        (refund_charge, (p, 3200)),
-    )
+    cases = ((refund_charge, (p, 3200)),)
     for func, args in cases:
         with pytest.raises(NotImplementedError):
             await func(*args)
