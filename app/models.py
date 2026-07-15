@@ -42,6 +42,13 @@ class Planner(Base):
     # Stripe Connect (Standard) account that receives funds and is
     # merchant of record (on_behalf_of)
     stripe_account_id: Mapped[str] = mapped_column(String(64))
+    # The planner's own participation: a playing planner is an
+    # ordinary Attendee + Rsvp row (decisions.md 2026-07-16). They
+    # count in the split divisor when present but are NEVER charged
+    # — no Payment row. None = not playing.
+    attendee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("attendees.id")
+    )
 
 
 class Attendee(Base):
@@ -81,6 +88,11 @@ class Event(Base):
     # (charge-at-close, decisions.md 2026-07-15). The actual share at
     # close divides by who was marked present, not this.
     goal_attendance: Mapped[int]
+    # The quoted estimate, snapshotted (decisions.md 2026-07-16):
+    # total ÷ goal at creation, refreshable while draft, frozen once
+    # open (enforced by the event-edit service, not the DB).
+    # Cap-and-absorb caps at THIS, not a recomputed formula.
+    estimated_share_cents: Mapped[int] = mapped_column(BigInteger)
     # Event machine: draft/open/closed/settled/archived/cancelled
     state: Mapped[str] = mapped_column(
         String(16), default="draft"

@@ -2,3 +2,6 @@ ruff==0.15.20
 pytest==9.1.1
 pytest-asyncio==1.4.0
 httpx==0.28.1
+# In-memory SQLite for transactional service tests (decisions.md
+# 2026-07-16) — real async commits, no server, tests stay hermetic
+aiosqlite==0.22.1

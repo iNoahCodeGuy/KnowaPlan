@@ -4,10 +4,18 @@ Rule (CLAUDE.md): tests never call the live Stripe API. Two layers:
 credentials are blanked for the whole test process, and payment
 tests take the `mock_stripe` fixture instead of the real SDK.
 """
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock
 
 import pytest
 import stripe as real_stripe
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from app.models import Base
 
 
 @pytest.fixture(autouse=True)
@@ -32,3 +40,18 @@ def mock_stripe(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     stripe.StripeError = real_stripe.StripeError
     monkeypatch.setattr("app.payments.stripe", stripe)
     return stripe
+
+
+@pytest.fixture
+async def db_session() -> AsyncIterator[AsyncSession]:
+    """Real async session on in-memory SQLite: record-first commit
+    ordering is tested against real commits, hermetically. SQLite
+    stores tz-naive datetimes — fine for ordering tests; Postgres
+    fidelity comes with live dogfood (decisions.md 2026-07-16)."""
+    engine = create_async_engine("sqlite+aiosqlite://")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        yield session
+    await engine.dispose()
