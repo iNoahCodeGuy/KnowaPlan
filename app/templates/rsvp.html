@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }} — your RSVP{% endblock %}
+{% block content %}
+<h1>{{ event.title }}</h1>
+<p class="muted">
+  Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+  about {{ event.estimated_share_cents | dollars }}/person
+</p>
+
+{% if card_banner == "saved" %}
+<p class="ok">Card saved ✓ — we'll charge only your actual share
+  after the game. Nothing is charged now.</p>
+{% elif card_banner == "failed" %}
+<p class="error">That card didn't save ({{ card_error }}). Try
+  another card below, or skip it — you'll get a tap-to-pay link
+  after the game instead.</p>
+{% elif card_banner == "unverified" %}
+<p class="error">We couldn't confirm the card save with Stripe —
+  reload this page to try again.</p>
+{% endif %}
+
+<p>Hi {{ attendee.name }} — you're
+  <strong>{{ rsvp.state }}</strong>.</p>
+
+{% if event.state == "open" %}
+  {% if choices %}
+  <form method="post" action="/r/{{ rsvp.rsvp_token }}/respond">
+    {% for c in choices %}
+    <button name="choice" value="{{ c }}">{{ c }}</button>
+    {% endfor %}
+  </form>
+  {% else %}
+  <p class="muted">Can't make it after all? Text
+    {{ planner.name }} — they'll sort it out at settle-up.</p>
+  {% endif %}
+
+  {% if show_card_section %}
+  <h2>Card</h2>
+  {% if attendee.stripe_payment_method_id %}
+    <p><span class="badge">card on file</span> We'll charge only
+    your actual share after the game — usually around
+    {{ event.estimated_share_cents | dollars }}. Nothing is
+    charged now.</p>
+  {% elif not publishable_key %}
+    <p class="muted">Card saving isn't configured
+    (STRIPE_PUBLISHABLE_KEY).</p>
+  {% else %}
+    <p class="muted">Optional: save a card and your share —
+    usually around
+    {{ event.estimated_share_cents | dollars }} — is charged
+    automatically after the game. No card? You'll get a
+    tap-to-pay link instead.</p>
+    <button id="add-card">Add a card</button>
+    <div id="card-form" hidden>
+      <div id="payment-element"></div>
+      <button id="save-card">Save card</button>
+    </div>
+    <p id="card-error" class="error" hidden></p>
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+    (function () {
+      var addBtn = document.getElementById("add-card");
+      function showError(msg) {
+        var el = document.getElementById("card-error");
+        el.textContent = msg || "Something went wrong.";
+        el.hidden = false;
+      }
+      addBtn.addEventListener("click", async function () {
+        addBtn.disabled = true;
+        var resp = await fetch(
+          "/r/{{ rsvp.rsvp_token }}/setup-intent",
+          {method: "POST"});
+        var data = await resp.json();
+        if (!resp.ok) {
+          showError(data.error);
+          addBtn.disabled = false;
+          return;
+        }
+        var stripe = Stripe("{{ publishable_key }}");
+        var elements = stripe.elements(
+          {clientSecret: data.client_secret});
+        elements.create("payment").mount("#payment-element");
+        document.getElementById("card-form").hidden = false;
+        document.getElementById("save-card").addEventListener(
+          "click", async function () {
+            var result = await stripe.confirmSetup({
+              elements: elements,
+              confirmParams: {
+                return_url: window.location.origin
+                  + "/r/{{ rsvp.rsvp_token }}",
+              },
+              redirect: "if_required",
+            });
+            if (result.error) {
+              showError(result.error.message);
+            } else {
+              // Same server path as the 3DS-redirect outcome
+              window.location = "/r/{{ rsvp.rsvp_token }}"
+                + "?setup_intent=" + result.setupIntent.id;
+            }
+          });
+      });
+    })();
+    </script>
+  {% endif %}
+  {% endif %}
+{% else %}
+  {% if event.state == "cancelled" %}
+  <p>This event was cancelled. Nothing was charged.</p>
+  {% else %}
+  <p>This event is {{ event.state }} — RSVPs are closed.</p>
+  {% endif %}
+  {% if payment %}
+    {% if payment.state == "paid" %}
+    <p class="ok">Paid
+      {{ payment.charged_cents | dollars }} ✓ — thanks!</p>
+    {% elif payment.state == "unpaid" %}
+    <p>Your share is
+      {{ (payment.charge_requested_cents
+          or event.estimated_share_cents) | dollars }} —
+      {{ planner.name }} will text you a payment link.</p>
+    {% endif %}
+  {% endif %}
+{% endif %}
+{% endblock %}

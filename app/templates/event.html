@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ event.title }} — KnowaPlan{% endblock %}
+{% block content %}
+<h1>{{ event.title }}</h1>
+<p class="muted">
+  Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+  your share will be about
+  {{ event.estimated_share_cents | dollars }}
+</p>
+{% if event.state == "open" %}
+  <p>Nothing is charged now — your actual share is charged after
+  the game, split by who actually plays.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form class="stack" method="post"
+        action="/e/{{ event.event_token }}/rsvp">
+    <label for="name">Your name</label>
+    <input id="name" name="name" required
+           value="{{ form.get('name', '') }}">
+    <label for="phone">Your phone</label>
+    <input id="phone" name="phone" required
+           value="{{ form.get('phone', '') }}">
+    <button type="submit">RSVP</button>
+  </form>
+  <p class="muted">Already answered? Enter the same phone to get
+  back to your RSVP page.</p>
+{% elif event.state == "draft" %}
+  <p>This event isn't open for RSVPs yet — check back once
+  {{ planner.name }} shares it.</p>
+{% elif event.state == "cancelled" %}
+  <p>This event was cancelled. Nothing was charged.</p>
+{% else %}
+  <p>This event is {{ event.state }} — RSVPs are closed. Talk to
+  {{ planner.name }} if something's off.</p>
+{% endif %}
+{% endblock %}
