@@ -358,3 +358,93 @@ re-marking (needs refunds — ships with walk-ins), walk-ins, the
 **Testing:** transactional behavior is pinned against in-memory
 SQLite (aiosqlite, dev-only) — real commits, still hermetic;
 Postgres fidelity arrives with live dogfood.
+
+## 2026-07-16: Capability-URL schema — token grain and DB bootstrap
+**Context:** implementing the capability URLs (2026-07-13) for the
+demo web layer forced two decisions; grilled and aligned with the
+owner before any code.
+**1. The RSVP capability is per attendee PER EVENT.** rsvp_token
+lives on the Rsvp row, not the Attendee. "Per-attendee link minted
+at RSVP" read either way; on the Attendee, one leaked or forwarded
+link would change that person's RSVPs for EVERY event, past and
+future — the same credential authorizing many contexts, eroding
+one-token-per-purpose. On the Rsvp row a link controls exactly one
+event's answer, and a returning attendee gets a fresh link per
+event. Re-entering a phone on /e/ finds the same row again, so a
+lost /r/ link is recoverable without accounts.
+**2. Schema bootstrap is an explicit command, not startup magic.**
+`python -m app.bootstrap` runs metadata.create_all; the app never
+touches schema on boot. create_all only ADDS tables — it cannot
+ALTER — so the dev reset story after a model change is
+drop/recreate, documented beside the command. Alembic (real
+migrations) arrives at live dogfood, when data must survive schema
+changes.
+**Mechanism:** secrets.token_urlsafe(16) — ~128-bit, 22 URL-safe
+chars — as a Python-side column default, so an insert cannot forget
+to mint. One column per purpose (events.event_token,
+events.admin_token, rsvps.rsvp_token); each route queries ONLY its
+own column, making cross-purpose reuse structurally impossible. No
+collision-retry loop: the unique index converts astronomically-
+unlikely (birthday bound ~1e-27 at a million rows) into
+loudly-enforced.
+
+## 2026-07-16: Public create page gated; planner account setting renamed
+**Context:** live dogfood deploys the app to a public HTTPS host
+(first real-money event targeted for 2026-07-29). Every event
+routes charges into the planner's connected account, so an open
+create page would let a stranger take card payments through the
+owner's Stripe — unacceptable surface once live keys exist.
+**Chose:** an env-set create password (CREATE_PASSWORD), checked
+with a constant-time compare (secrets.compare_digest over
+encoded bytes) on POST /events; unset = creation refused, fail
+closed; the password is never echoed into a re-rendered form.
+**Alternatives:** a capability create-URL (one eternal token
+that lands in browser history and server logs — a password
+rotates naturally and lives only in the planner's head); leaving
+it open (contradicts correctness-over-speed with live keys).
+**Also:** test_planner_account_id → planner_account_id
+(PLANNER_ACCOUNT_ID). The live CONNECTED account id must not
+live in a variable named "test", and the comment now pins the
+platform-vs-connected distinction: this is the account that
+RECEIVES money (transfer_data.destination), never the platform's
+own id — Stripe rejects a destination of self.
+
+## 2026-07-16: Demo-slice web layer — shape and guards
+**Context:** the web layer (capability URLs → pages → settle) was
+built step-by-step under align-before-acting; the grilled choices
+are consolidated here so they outlive the session log.
+**Shape:** server-rendered Jinja2 + form POSTs; the only browser
+JS is the /r/ Payment Element island, and it is LAZY — a
+SetupIntent is minted when the attendee taps "Add a card", never
+on page render (/r/ is the revisit-all-week page). RSVP entry is
+two-step — /e/ identifies by phone (get-or-create; re-entering a
+phone recovers a lost /r/ link without accounts), /r/ answers —
+because a card save needs an existing Attendee before the island
+can render. The planner row is get-or-created by phone from the
+create form; Connect onboarding stays a live-dogfood concern.
+Buttons on /r/ are derived from the transition table, so the UI
+can never offer an illegal move — a `going` attendee gets
+"text the planner", not a back-out button (going →
+attended|no_show only).
+**Money-relevant guards:**
+- A playing planner is auto-linked by phone match at RSVP
+  creation (sets Planner.attendee_id) — no UI, can't be
+  forgotten; this arms settle_event's never-charge-the-planner
+  skip (2026-07-16 settlement mechanics).
+- cancel_event refuses once ANY Payment row has left pristine
+  `none` (state changed or record-first stamp set): a crashed
+  settle can move money while the event is still `closed`, and
+  cancelling then would stamp "nothing charged" onto a lie.
+- The settle route accepts only an explicit mode (actual|cap);
+  the cap button renders ONLY when actual > estimate, labeled
+  with the absorbed total — silence charges actual (2026-07-15).
+- Tap-to-pay links are shown once (settle report / retry result)
+  and re-minted on demand — never stored (a Checkout URL goes
+  stale within ~24h and a stored one would lie) and never
+  re-fetched per roster load; one-payable-link-per-row stands
+  (2026-07-16).
+**Deferred, made explicit:** the maybe→declined auto-convert at
+event start (scenarios.md) is a TIMER job and defers with the
+scheduler (2026-07-13 deferred list, clarified here) — the settle
+preview warns about stale maybes instead; a maybe who played taps
+Going on their own link while the event is open.

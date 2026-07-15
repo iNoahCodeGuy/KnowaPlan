@@ -8,6 +8,7 @@ integer cents, never float.
 DRAFT FOR REVIEW: table grain and columns are a first pass; the
 state semantics come from state_machines.md.
 """
+import secrets
 from datetime import datetime
 
 from sqlalchemy import (
@@ -23,6 +24,16 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column,
 )
+
+
+def _mint_token() -> str:
+    # Capability-URL credential (decisions.md 2026-07-13): the link
+    # IS the permission, so it must be unguessable — 128 bits from
+    # the CSPRNG as 22 URL-safe chars. No collision-retry loop: the
+    # column's unique index enforces what the birthday bound
+    # (~1e-27 at a million rows) already promises; if the
+    # impossible fires, the insert fails loudly.
+    return secrets.token_urlsafe(16)
 
 
 class Base(DeclarativeBase):
@@ -79,6 +90,18 @@ class Event(Base):
     planner_id: Mapped[int] = mapped_column(
         ForeignKey("planners.id")
     )
+    # Capability URLs (decisions.md 2026-07-13): one token per
+    # purpose, never reused across purposes — each route looks up
+    # ONLY its own column, so a token can never authorize the
+    # wrong purpose. /e/{event_token} = view + start an RSVP.
+    event_token: Mapped[str] = mapped_column(
+        String(32), unique=True, default=_mint_token
+    )
+    # /admin/{admin_token} = attendance, settlement, cancellation.
+    # Whoever holds it IS the planner (accepted v0 risk).
+    admin_token: Mapped[str] = mapped_column(
+        String(32), unique=True, default=_mint_token
+    )
     title: Mapped[str] = mapped_column(String(200))
     starts_at: Mapped[datetime]
     # Fixed total the group splits (court rental), integer cents
@@ -122,6 +145,13 @@ class Rsvp(Base):
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id"))
     attendee_id: Mapped[int] = mapped_column(
         ForeignKey("attendees.id")
+    )
+    # /r/{rsvp_token}, minted at RSVP: lets this attendee change
+    # THIS event's answer — per (event, attendee) like the row
+    # itself, so a leaked or forwarded link touches one event only
+    # (decisions.md 2026-07-16).
+    rsvp_token: Mapped[str] = mapped_column(
+        String(32), unique=True, default=_mint_token
     )
     # RSVP machine: pending/going/maybe/declined/attended/no_show.
     # A card on file is OPTIONAL and tracked on Payment/Attendee, not

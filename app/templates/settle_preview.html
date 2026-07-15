@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Settle — {{ event.title }}{% endblock %}
+{% block content %}
+<h1>Settle up: {{ event.title }}</h1>
+
+{% if participants == 0 %}
+<p>Nobody is marked (or assumed) present — settling now charges
+<strong>nobody</strong> and closes the books.</p>
+{% else %}
+<p>{{ participants }} in the split{% if planner_playing %}
+(including you — you count in the divisor and are never
+charged){% endif %} · true share
+<strong>{{ share | dollars }}</strong> · estimate quoted at RSVP
+{{ event.estimated_share_cents | dollars }}.</p>
+{% endif %}
+
+{% if unmarked %}
+<p class="error">{{ unmarked }} going
+{{ "answer is" if unmarked == 1 else "answers are" }} unmarked —
+your settle default treats them as
+<strong>{% if assume %}attended (charged){% else %}absent (not
+charged){% endif %}</strong>. Mark attendance first if that's
+wrong.</p>
+{% endif %}
+
+{% if maybes %}
+<p class="error">{{ maybes }} still maybe — they won't be charged.
+If they played, have them tap Going on their own link
+<strong>before</strong> you settle.</p>
+{% endif %}
+
+{% if event.state == "open" %}
+<p class="muted">Settling closes RSVPs first.</p>
+{% endif %}
+
+<form method="post" action="/admin/{{ event.admin_token }}/settle">
+{% if over_estimate %}
+  <p>The true share ({{ share | dollars }}) is higher than the
+  estimate ({{ event.estimated_share_cents | dollars }}). Your
+  call — the default is charging the actual share:</p>
+  <button name="mode" value="actual">
+    Charge actual shares ({{ share | dollars }} each)</button>
+  <button name="mode" value="cap">
+    Cap at the estimate
+    ({{ event.estimated_share_cents | dollars }} each) —
+    I absorb {{ capped_shortfall | dollars }}</button>
+{% else %}
+  <button name="mode" value="actual">Settle now</button>
+{% endif %}
+</form>
+<p><a href="/admin/{{ event.admin_token }}">Back to the
+roster</a></p>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}New event — KnowaPlan{% endblock %}
+{% block content %}
+<h1>New event</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form class="stack" method="post" action="/events">
+  <label for="planner_name">Your name</label>
+  <input id="planner_name" name="planner_name" required
+         value="{{ form.get('planner_name', '') }}">
+  <label for="planner_phone">Your phone</label>
+  <input id="planner_phone" name="planner_phone" required
+         value="{{ form.get('planner_phone', '') }}">
+  <label for="title">Event title</label>
+  <input id="title" name="title" required
+         value="{{ form.get('title', '') }}">
+  <label for="starts_at">Starts</label>
+  <input id="starts_at" name="starts_at" type="datetime-local"
+         required value="{{ form.get('starts_at', '') }}">
+  <label for="total_cost_dollars">Total cost (dollars)</label>
+  <input id="total_cost_dollars" name="total_cost_dollars"
+         inputmode="decimal" required
+         value="{{ form.get('total_cost_dollars', '') }}">
+  <label for="goal_attendance">Goal attendance</label>
+  <input id="goal_attendance" name="goal_attendance" type="number"
+         min="1" required
+         value="{{ form.get('goal_attendance', '') }}">
+  <label for="create_password">Create password</label>
+  <input id="create_password" name="create_password"
+         type="password" required>
+  <label for="settle_default">If I never mark attendance</label>
+  <select id="settle_default" name="settle_default">
+    <option value="assume_all_attended">
+      Assume everyone going attended (charge their shares)
+    </option>
+    <option value="mark_all_absent">
+      Mark unconfirmed absent (charge nobody unmarked)
+    </option>
+  </select>
+  <button type="submit">Create event</button>
+</form>
+<p class="muted">The estimate shown to the group is total ÷ goal.
+Nothing is charged until after the game.</p>
+{% endblock %}

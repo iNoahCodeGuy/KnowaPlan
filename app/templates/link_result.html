@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ attendee.name }} — {{ outcome }}{% endblock %}
+{% block content %}
+<h1>{{ attendee.name }}: {{ outcome }}</h1>
+{% if outcome == "paid" %}
+<p class="ok">Collected ✓ — the charge is confirmed.</p>
+{% elif link_url %}
+<p>Tap-to-pay link for
+{{ (amount_cents or 0) | dollars }} — shown once; re-mint from
+the roster if you lose it:</p>
+<p><code>{{ link_url }}</code></p>
+<p><a href="sms:{{ attendee.phone }}?body={{
+  ('Your share for ' ~ event.title ~ ': ' ~
+   ((amount_cents or 0) | dollars) ~
+   '. Pay here: ' ~ link_url) | urlencode }}">Text it from your
+  phone</a></p>
+{% endif %}
+<p><a href="/admin/{{ token }}">Back to the roster</a></p>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Settled — {{ event.title }}{% endblock %}
+{% block content %}
+<h1>Settled: {{ event.title }}</h1>
+<p>True share {{ report.share_cents | dollars }} · charged
+{{ report.charge_cents | dollars }} each{% if
+report.shortfall_cents %} ·
+<strong>you're absorbing
+{{ report.shortfall_cents | dollars }}</strong>{% endif %}</p>
+
+{% if report.outcomes %}
+<table>
+  <tr><th>Who</th><th>Result</th><th></th></tr>
+  {% for o in report.outcomes %}
+  {% set attendee = attendees_by_id.get(o.attendee_id) %}
+  {% set payment = payments_by_attendee.get(o.attendee_id) %}
+  <tr>
+    <td>{{ attendee.name if attendee else o.attendee_id }}</td>
+    <td>{{ o.result }}</td>
+    <td>
+      {% if o.link_url %}
+        <code>{{ o.link_url }}</code>
+        {% if attendee %}
+        <a href="sms:{{ attendee.phone }}?body={{
+          ('Your share for ' ~ event.title ~ ': ' ~
+           ((payment.charge_requested_cents
+             if payment else report.charge_cents) | dollars) ~
+           '. Pay here: ' ~ o.link_url) | urlencode }}">text
+          it</a>
+        {% endif %}
+        <span class="muted">shown once — re-mint from the roster
+        if you lose it</span>
+      {% elif o.result == "dangling" and payment %}
+        <form method="post"
+              action="/admin/{{ event.admin_token }}/retry/{{ payment.id }}">
+          <button>Retry charge</button>
+        </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>Nobody was charged.</p>
+{% endif %}
+<p><a href="/admin/{{ event.admin_token }}">Back to the
+roster</a></p>
+{% endblock %}

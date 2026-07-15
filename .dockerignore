@@ -1,0 +1,14 @@
+# The image carries code and nothing else.
+.git
+.venv
+.env
+.claude
+.dockerignore
+Dockerfile
+__pycache__
+**/__pycache__
+tests
+*.md
+skeleton_*.py
+pyproject.toml
+requirements-dev.txt
