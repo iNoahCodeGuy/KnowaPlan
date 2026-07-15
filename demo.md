@@ -91,6 +91,52 @@ from planner to attendee — the links are the only identity.
 drop/recreate IS the migration story until live dogfood brings
 Alembic.)
 
+## Deployed (Railway) — for links real phones can open
+
+Texted /e/, /r/, and tap-to-pay flows need a public HTTPS URL
+(Stripe also requires HTTPS for live-mode card pages). Steps:
+
+1. railway.com → New Project → **Deploy from GitHub repo** →
+   pick this repo (it auto-detects the Dockerfile). Point it at
+   the branch you're testing.
+2. In the project: **New → Database → PostgreSQL**.
+3. On the APP service → Variables, set:
+
+   | Variable | Value |
+   | --- | --- |
+   | DATABASE_URL | the Postgres service's URL with the scheme rewritten: `postgresql://…` → `postgresql+asyncpg://…` (keep the private `…railway.internal` host) |
+   | STRIPE_SECRET_KEY | `sk_test_…` — TEST keys until the live flip |
+   | STRIPE_PUBLISHABLE_KEY | `pk_test_…` |
+   | PLANNER_ACCOUNT_ID | test-mode CONNECTED account until the live flip |
+   | CREATE_PASSWORD | pick something; unset = creation locked |
+
+4. Service → Settings → Networking → **Generate Domain** → your
+   public https URL.
+5. Create the schema EXPLICITLY (never on startup): from your
+   local checkout,
+
+       DATABASE_URL="postgresql+asyncpg://<public PG url>" \
+         .venv/bin/python -m app.bootstrap
+
+   (the Postgres service's PUBLIC url, same scheme rewrite), or
+   `railway ssh` into the app service and run
+   `python -m app.bootstrap` there (private url already set).
+6. Verify: `https://<domain>/health` → `{"status":"ok"}`, then
+   walk the full test-mode demo above ON the public domain from
+   a real phone.
+
+The Dockerfile starts uvicorn with `--proxy-headers
+--forwarded-allow-ips '*'` — that is what makes the share links
+the roster prints carry the real https domain instead of an
+internal hostname. If links ever print `http://` or a weird
+host, that flag got lost.
+
+**Live flip** (the $1 test, then the real event): swap
+STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY to live keys and
+PLANNER_ACCOUNT_ID to the LIVE connected account, restart the
+service — no code change. Refunds during the live test are made
+from the Stripe DASHBOARD (in-app refunds ship with walk-ins).
+
 ## If it refuses loudly
 
 | Symptom | Fix |
