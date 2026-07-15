@@ -103,3 +103,189 @@ still reuses its key and therefore cannot double-charge.
 **Locks in:** Payment uniqueness in app/models.py; the key-derivation
 rule documented in app/payments.py; terminal Payment rows are never
 reused for new money movement.
+
+## 2026-07-13: Next milestone is a test-mode demo; live dogfood after
+**Alternatives:** (a) Build straight toward a live event with real
+cards. (b) Test-mode demo first: the full vertical slice run with
+Stripe test tokens, planner and attendees all played by the owner.
+**Chose:** (b). The demo delivers: create event → share link → RSVP +
+authorize (test cards) → close at start time → mark attendance →
+capture/void → settled. Deferred from the slice: the auto-settle
+backstop scheduler (settlement is manual, but auth_expires_at is still
+recorded and captures past expiry are refused — the invariant holds
+without the timer), real Twilio (SMS bodies are logged), .ics,
+walk-ins, transfer-organizer, and the failed → resolved settle-up flow
+(planner chases manually).
+**Why:** every correctness lesson — transitions, idempotency,
+capture-below-auth — is learnable in test mode where a bug costs
+nothing; at a live event it costs real money and the group's trust.
+Everything deferred is either a convenience or has a manual fallback;
+nothing deferred is load-bearing for the money path.
+**Locks in:** live dogfood is its own follow-up milestone: live keys,
+activated Connect account, hardened attendee-facing copy, one real
+event.
+
+## 2026-07-13: Identity via capability URLs; no accounts in v0
+**Alternatives:** (a) SMS-OTP login. (b) Accounts with passwords.
+(c) Capability URLs — unguessable tokens as the only credential.
+**Chose:** (c). Three tokens, one per purpose, never reused across
+purposes: an event link /e/{token} the planner texts the group (view
+event, start an RSVP by entering name + phone — no phone verification);
+a per-attendee link /r/{token} minted at RSVP (lets that attendee
+change their own RSVP — this is how maybe → going and declined → going
+work without sessions); a planner admin link /admin/{token} minted at
+event creation (attendance, settlement, cancellation). Tokens are
+~128-bit random, stored in the DB.
+**Why:** (a) drags Twilio into the demo milestone and adds friction at
+the court; (b) is not v0. The card authorization is the real gate; in
+a known friend group a mistyped phone is a nuisance, not an attack.
+**Accepted risk:** whoever holds the admin link IS the planner. Fine
+for the friend-group v0; real login + OTP is a later milestone, before
+opening to strangers.
+
+## 2026-07-13: Worst-case share derived from a minimum headcount
+**Alternatives:** (a) Planner types a worst-case dollar figure
+directly. (b) Planner enters total cost and a minimum headcount; the
+app computes worst_case_share_cents = ceil(total / min_headcount).
+(c) Recompute the worst case dynamically as RSVPs arrive.
+**Chose:** (b). A $120 court with "at least 4 of us" holds $30 per
+attendee; the RSVP page says the likely charge is less.
+**Why:** min headcount makes the planner's bet explicit — if only 3
+show, the actual share ($40) exceeds the hold ($30), capture is capped
+at the authorization, and the planner knowingly eats the gap (the same
+rule scenarios.md already sets for cost increases). A raw dollar input
+hides that bet. (c) would force re-authorizations mid-flight.
+**Locks in:** ceil, never floor, for the hold (never under-authorize);
+min_headcount stored on Event; the shortfall is computed and shown to
+the planner at settlement, never silently absorbed.
+
+## 2026-07-13: Uneven splits — everyone pays floor, planner absorbs
+**Alternatives:** (a) Assign the leftover cents to a few attendees so
+the totals match exactly. (b) Everyone pays floor(total / headcount);
+the planner absorbs the remainder.
+**Chose:** (b). Max planner loss is headcount − 1 cents per event.
+**Why:** distributing cents is "fairer" by pennies but generates "why
+did I pay more than him?" — social cost with no monetary upside at
+this scale.
+
+## 2026-07-13: auth_failed — terminal Payment state for RSVP declines
+**Problem:** the machines modeled capture failure (authorized →
+failed) but not a decline at authorization time. The idempotency key
+derives from payment.id, so the Payment row exists before the Stripe
+call — a declined auth left a row stuck in `none` with no terminal
+state.
+**Alternatives:** (a) Reuse `failed`. (b) Add terminal `auth_failed`
+(none → auth_failed).
+**Chose:** (b). The RSVP stays `going` (= said yes, not yet covered),
+the roster shows them unpaid, and a retry with another card is a NEW
+attempt row — fresh idempotency key by construction (2026-07-08).
+**Why:** `failed` means a CAPTURE failure and drags the settle-up
+grace flow (resolved/abandoned) with it; an RSVP-time decline has no
+hold, no grace period, and no money at risk — a different animal that
+deserves its own state.
+
+## 2026-07-13: Record-first money movement
+**Problem:** "a capture and its matching attendance update happen
+together, or neither does" cannot be literal — Stripe is not part of
+the DB transaction, and a crash between the two calls is possible.
+**Alternatives:** (a) Stripe first, then one transaction writing both.
+(b) Record-first: one transaction writes the attendance change AND a
+request stamp (capture_requested_at / void_requested_at) on the
+Payment row; then the Stripe call; then a second write sets the final
+state (captured / voided).
+**Chose:** (b), symmetrically for captures and voids.
+**Why:** (a)'s crash leaves money moved with no DB trace — discovered
+by an angry text, reconciled by digging through the Stripe dashboard.
+(b)'s crash leaves a dangling row findable by query (stamp set, state
+still authorized); the admin page surfaces it, and the retry reuses
+the SAME idempotency key, so Stripe replays the original outcome and
+the books converge whether or not the first call landed. A missed
+void matters too: the hold sits on a friend's card until expiry and
+reads as "they charged me anyway."
+**Principle:** the database must always know at least as much as
+Stripe. Write intent before moving money; discrepancies become
+queryable, not anecdotal.
+**Locks in:** capture_requested_at and void_requested_at columns on
+Payment; the "together or neither" rule in CLAUDE.md now names this
+mechanism.
+
+## 2026-07-13: No Stripe webhooks until live dogfood
+**Alternatives:** (a) Stand up a webhook endpoint in the demo
+milestone. (b) Rely on synchronous API responses plus our own
+auth_expires_at guard.
+**Chose:** (b). Every v0 money call — authorize (confirm=True),
+capture, cancel — returns its outcome in the same request, and 3DS is
+deferred (state_machines.md), so nothing arrives asynchronously.
+Expiry is a deadline we already know at authorization time and enforce
+locally; we don't need Stripe to phone us about it.
+**Revisit at live dogfood:** disputes, bank-initiated reversals, and
+eventually 3DS (authorization becomes asynchronous) all arrive only by
+webhook.
+
+## 2026-07-15: Pivot from card holds to charge-at-close
+**Supersedes the hold / manual-capture money model** built across
+2026-05-22 (capture at actual share), 2026-05-26 (Extended
+Authorization), 2026-05-28 (release-not-refund + `voided`; auto-settle
+bounded by auth expiry), 2026-07-08 (capture-at-worst-case; attempt
+grain), and 2026-07-13 (record-first; `auth_failed`; worst-case from
+min headcount). Those entries stay as history; this one is now the
+money model. Where they conflict, this entry wins.
+**Problem:** the hold model authorizes a worst-case hold at RSVP and
+captures the actual share at settlement. It guarantees funds, but it
+carries the system's heaviest complexity — the 7-day auth-expiry fuse,
+the void path, the capture-≤-hold ceiling, the release-vs-refund
+distinction, record-first crash choreography, and the money_guard
+hook — plus the "you charged me already?!" pending-hold UX. For a
+known friend group splitting ~$30 (the v0 scope), that complexity
+insures against a risk v0 does not run: strangers and large amounts.
+**Chose:** charge-at-close. No authorization, no hold at RSVP.
+- Card is OPTIONAL at RSVP (a `going` or `maybe` attendee may add one
+  or not; a saved card is a SetupIntent, not a hold — no money moves).
+- At close the split locks: floor(total ÷ attendees marked present).
+- Card on file → charged automatically for their share at close.
+- No card → planner sends a tap-to-pay link; tapping shows a
+  "$X to [Planner] — Pay" confirm screen before the charge.
+**Sub-decisions:**
+- **Close is manual, never at start time.** The Event no longer
+  auto-closes when the game starts. The planner closes RSVPs; RSVPs
+  and new joins stay OPEN through the game (late arrivals and brought
+  friends lower everyone's share). The only automatic close is the
+  settlement backstop — the planner begins marking attendance, or the
+  settle timer fires.
+- **Goal attendance replaces worst-case / min headcount.** The planner
+  sets a goal; total ÷ goal is the ESTIMATE shown at RSVP. It sizes no
+  hold (there is none) — display + expectation only.
+- **Actual > estimate (fewer than goal show up):** the planner's
+  choice at settlement — charge the true (higher) share, or cap at the
+  quoted estimate and absorb the gap. DEFAULT, including auto-settle
+  with no planner present: charge the actual share. Absorbing is an
+  active generosity choice; silence must never trigger it.
+- **Cardless who never pays:** one automatic nudge at +24h prompts the
+  PLANNER to send a reminder; after that the balance sits on the
+  roster and the planner nudges on demand. No dunning engine in v0.
+- **Reminders come from the planner's own number, not Twilio.** A
+  server cannot send SMS from a personal line, so the app opens the
+  planner's native Messages pre-filled (recipient + amount + link) and
+  the planner taps send. Zero Twilio, zero A2P registration in v0.
+  (Overrides the Twilio-as-reminder-channel line in CLAUDE.md.)
+- **Planner sees who owes, per event** — the roster shows paid /
+  auto-pay / will-be-billed so exposure is visible before booking.
+**Accepted risk — this is the guarantee we gave up:** payment is NO
+LONGER guaranteed. A saved card can decline off-session at close, and
+a cardless attendee can ghost the link. The planner can be stiffed —
+exactly what the hold prevented. Acceptable only because v0 is a known
+friend group and the amounts are small.
+**Revisit trigger:** reintroduce holds the day KnowaPlan opens to
+strangers OR charges amounts large enough that one decline hurts. The
+hold's complexity earns its keep there; at friend-group / small-dollar
+scale it does not.
+**Obsoletes:** Extended Authorization (2026-05-26) and the
+expiry-bounded backstop (2026-05-28) — no authorization to expire;
+`auth_failed`, `authorized`, `voided`, capture-≤-hold, and the
+release-vs-refund invariant — no hold to release or void. Refund stays
+reversal-of-a-collected-charge only.
+**Follow-up (NOT done here):** app/payments.py, app/state_machines.py,
+app/models.py, the money_guard hook, and the test suite still encode
+the hold model and must be reconciled under owner review (CLAUDE.md:
+money + state-machine code is author-with-review). This entry and the
+canonical docs move first; the code follows deliberately.

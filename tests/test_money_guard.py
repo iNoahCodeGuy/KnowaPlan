@@ -39,26 +39,23 @@ DENIED = [
     write(PY, "client.refunds.create(charge=ch)"),
     write(PY, 'requests.post("https://api.stripe.com/v1/refunds")'),
     write(PY, "from stripe import Refund as R\nR.create()"),
-    # settle scheduling with a fixed offset and no expiry bound
-    write(PY, "def settlement_job():\n    at = end + timedelta(days=6)"),
-    write(PY, "backstop = event.end + timedelta(hours=24)"),
     # MultiEdit-style edits array is scanned too
     {"tool_name": "Edit", "tool_input": {"file_path": PY, "edits": [
         {"new_string": "stripe.Refund.create(charge=ch)"}]}},
 ]
 
 ALLOWED = [
-    # acknowledged refund of a captured charge
-    write(PY, f"# {ACK}\nassert p.state == 'captured'\n"
+    # acknowledged refund of a COLLECTED charge (state paid)
+    write(PY, f"# {ACK}\nassert p.state == 'paid'\n"
               "stripe.Refund.create(charge=ch)"),
     # state names and prose are not API usage
     write(PY, 'state = "refunded"  # terminal'),
     # docs may discuss the Refund API freely
     write("/Users/x/KnowaPlan/decisions.md",
-          "never stripe.Refund.create on uncaptured"),
-    # settle scheduling that references auth expiry is the fix
-    write(PY, "backstop = min(target, earliest_auth_expiry)\n"
-              "at = end + timedelta(days=6)"),
+          "never stripe.Refund.create on uncollected"),
+    # settle scheduling is no longer guarded — the auth-expiry
+    # backstop was retired with holds (decisions.md 2026-07-15)
+    write(PY, "backstop = event.end + timedelta(hours=24)"),
     # the guard must not block edits to itself
     write("/Users/x/KnowaPlan/.claude/hooks/money_guard.py",
           "stripe.Refund.create"),

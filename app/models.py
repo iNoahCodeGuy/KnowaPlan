@@ -26,10 +26,10 @@ from sqlalchemy.orm import (
 
 
 class Base(DeclarativeBase):
-    # Timestamps feed the expiry-bounded backstop comparison; a
-    # naive column under server-tz/DST skew is exactly the
-    # "capture fires after the hold died" failure decisions.md
-    # (2026-05-28) exists to prevent. Store tz-aware, always.
+    # Store every timestamp tz-aware. Settle timing (settle_target_at,
+    # settled_at, charge_requested_at) is compared across the wire and
+    # audited; a naive column under server-tz/DST skew silently shifts
+    # those moments. tz-aware, always.
     type_annotation_map = {datetime: DateTime(timezone=True)}
 
 
@@ -51,8 +51,16 @@ class Attendee(Base):
     name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(32), unique=True)
     # Card on file lives on the PLATFORM account — a Stripe
-    # constraint for destination charges (see skeleton_02)
+    # constraint for destination charges (see skeleton_02). The card
+    # is saved at RSVP via a SetupIntent (charge-at-close, no hold —
+    # decisions.md 2026-07-15); None until the attendee saves one.
     stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(64)
+    )
+    # The saved PaymentMethod charged off-session at close. None =
+    # cardless (gets a tap-to-pay link instead). Reusable across this
+    # attendee's events once saved.
+    stripe_payment_method_id: Mapped[str | None] = mapped_column(
         String(64)
     )
 
@@ -68,15 +76,21 @@ class Event(Base):
     starts_at: Mapped[datetime]
     # Fixed total the group splits (court rental), integer cents
     total_cost_cents: Mapped[int] = mapped_column(BigInteger)
-    # Worst-case per-person share authorized at RSVP, integer cents
-    worst_case_share_cents: Mapped[int] = mapped_column(BigInteger)
+    # Planner's expected headcount. Sizes NO hold (there is none) —
+    # the RSVP estimate is total_cost_cents // goal_attendance
+    # (charge-at-close, decisions.md 2026-07-15). The actual share at
+    # close divides by who was marked present, not this.
+    goal_attendance: Mapped[int]
     # Event machine: draft/open/closed/settled/archived/cancelled
     state: Mapped[str] = mapped_column(
         String(16), default="draft"
     )
-    # Planner's settle target choice; the EFFECTIVE backstop is
-    # min(this, earliest auth expiry) — decisions.md 2026-05-28
+    # Planner's settle target (end-of-day / +24h / +48h / +6d). No
+    # auth expiry to bound it now — the backstop IS this target
+    # (decisions.md 2026-07-15 supersedes the 2026-05-28 min()).
     settle_target_at: Mapped[datetime | None]
+    # Auto-settle default: "assume_all_attended" (charge everyone
+    # present) or "mark_all_absent" (charge nobody). Was "void_all".
     settle_default: Mapped[str] = mapped_column(
         String(24), default="assume_all_attended"
     )
@@ -97,8 +111,9 @@ class Rsvp(Base):
     attendee_id: Mapped[int] = mapped_column(
         ForeignKey("attendees.id")
     )
-    # RSVP machine: pending/going/going_paid/maybe/declined/
-    # attended/no_show
+    # RSVP machine: pending/going/maybe/declined/attended/no_show.
+    # A card on file is OPTIONAL and tracked on Payment/Attendee, not
+    # here — no going_paid state (decisions.md 2026-07-15)
     state: Mapped[str] = mapped_column(
         String(16), default="pending"
     )
@@ -111,9 +126,9 @@ class Rsvp(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
-    # Terminal rows (voided, abandoned) stay for audit; an
-    # attendee re-added after a void gets a NEW row with the next
-    # attempt number — never a reused key against a dead intent
+    # Terminal rows (refunded, abandoned) stay for audit; an attendee
+    # re-added after abandoning gets a NEW row with the next attempt
+    # number — never a reused idempotency key (decisions.md 2026-07-08)
     __table_args__ = (
         UniqueConstraint("event_id", "attendee_id", "attempt"),
     )
@@ -124,17 +139,29 @@ class Payment(Base):
         ForeignKey("attendees.id")
     )
     attempt: Mapped[int] = mapped_column(default=1)
-    # Payment machine: none/authorized/captured/voided/refunded/
-    # failed/resolved/abandoned
+    # Payment machine: none/paid/unpaid/refunded/abandoned
+    # (charge-at-close, decisions.md 2026-07-15)
     state: Mapped[str] = mapped_column(String(16), default="none")
+    # The charge PaymentIntent — from the off-session saved-card
+    # charge, or created when a tap-to-pay link is completed
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(
         String(64), unique=True
     )
-    authorized_cents: Mapped[int | None] = mapped_column(BigInteger)
-    captured_cents: Mapped[int | None] = mapped_column(BigInteger)
-    # Extended Authorization is deferred: holds die 7 days after
-    # creation. Every settle path must be bounded by this moment.
-    auth_expires_at: Mapped[datetime | None]
-    # Why the terminal state was reached (no_show, removed,
-    # event_cancelled, auth_expired, ...) — for support questions
+    # Cardless path: the Checkout Session behind the outstanding
+    # tap-to-pay link. We poll its status on roster load to move
+    # unpaid → paid — no webhook in v0 (decisions.md 2026-07-13,
+    # 2026-07-15). None once paid by saved card, or never billed.
+    stripe_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True
+    )
+    # The actual share charged at close, integer cents. None until a
+    # charge lands.
+    charged_cents: Mapped[int | None] = mapped_column(BigInteger)
+    # Record-first stamp: set in the same DB txn as the attendance
+    # change, BEFORE the Stripe call; a row with this set but state
+    # still `none` is a dangling charge, retried with the SAME
+    # idempotency key (decisions.md 2026-07-13).
+    charge_requested_at: Mapped[datetime | None]
+    # Why a terminal/unpaid state was reached (no_card, declined,
+    # abandoned, ...) — for the roster and support questions
     state_reason: Mapped[str | None] = mapped_column(Text)

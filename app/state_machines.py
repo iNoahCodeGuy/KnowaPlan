@@ -18,32 +18,33 @@ EVENT: dict[str, set[str]] = {
     "cancelled": set(),
 }
 
-# RSVP: going_paid is reached only via a successful authorization.
+# RSVP: a card on file is OPTIONAL and tracked on the Payment row,
+# not here (charge-at-close, decisions.md 2026-07-15) — so `going`
+# goes straight to attended/no_show, with no going_paid gate.
 # declined → going (decisions.md 2026-07-08) is valid only while
 # the Event is open — that guard lives in the service layer; this
 # table has no event context.
 RSVP: dict[str, set[str]] = {
     "pending": {"going", "maybe", "declined"},
-    "going": {"going_paid"},
-    "going_paid": {"attended", "no_show"},
+    "going": {"attended", "no_show"},
     "maybe": {"going", "declined"},
     "declined": {"going"},
     "attended": set(),
     "no_show": set(),
 }
 
-# Payment: capturing less than authorized RELEASES the remainder
-# (not a refund); voided = released without capture; refunded =
-# reversal of a captured charge only. Walk-in direct charge
-# (none → captured) is deferred in v0 — deliberately absent.
+# Payment: charge-at-close (decisions.md 2026-07-15) — no holds.
+# The share is charged at close from a saved card (none → paid) or
+# lands unpaid (no card, or an off-session decline) and is then
+# collected via a tap-to-pay link (unpaid → paid) or given up on
+# (unpaid → abandoned). refunded = reversal of a COLLECTED charge
+# only. No authorized/voided/auth_failed/failed — those needed a
+# hold, which the 2026-07-15 pivot removed.
 PAYMENT: dict[str, set[str]] = {
-    "none": {"authorized"},
-    "authorized": {"captured", "voided", "failed"},
-    "captured": {"refunded"},
-    "failed": {"resolved", "abandoned"},
-    "voided": set(),
+    "none": {"paid", "unpaid"},
+    "paid": {"refunded"},
+    "unpaid": {"paid", "abandoned"},
     "refunded": set(),
-    "resolved": set(),
     "abandoned": set(),
 }
 

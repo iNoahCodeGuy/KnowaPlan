@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for KnowaPlan's money invariants.
+"""PreToolUse guard for KnowaPlan's money invariant.
 
-Enforces the two "Hook, not prose" decisions in decisions.md
-(2026-05-28):
+Refund guard — a Refund may only reverse an already-collected
+charge (Payment state `paid`). Under charge-at-close there is no
+hold to void and no uncaptured overage to release, so a Refund is
+the ONLY way money flows back — and it must never run against a
+charge that was never collected. New code touching the Refund API
+must carry the marker "refund-guard: captured-only" to show the
+author checked the payment is collected before refunding.
 
-1. Refund guard — a Refund may only reverse an already-captured
-   charge. Capture-less paths must capture less than the hold or
-   void the authorization, never refund. New code touching the
-   Refund API must carry the marker "refund-guard: captured-only"
-   to show the author checked the payment state is `captured`.
-
-2. Scheduler guard — the auto-settle backstop must be bounded by
-   the earliest authorization expiry, never a fixed post-event
-   offset alone (auths expire 7 days after creation).
+The old scheduler guard (auto-settle bounded by authorization
+expiry) was RETIRED in the 2026-07-15 pivot: no holds means no auth
+expiry to bound. See decisions.md 2026-05-28 (original) and
+2026-07-15 (retirement).
 
 Reads the hook payload JSON from stdin; prints a PreToolUse deny
-decision and exits 0 when an invariant is violated, otherwise
+decision and exits 0 when the invariant is violated, otherwise
 prints nothing (allow).
 """
 import json
@@ -32,12 +32,6 @@ REFUND_API = re.compile(
     r"|from\s+stripe(?:\.\S+)?\s+import\s+[^\n]*\bRefund\b"
 )
 REFUND_ACK = "refund-guard: captured-only"
-
-# "settl" over-triggers on purpose (settle, settling, settlement);
-# a silent miss costs money, a spurious deny costs a marker.
-SETTLE_CODE = re.compile(r"settl|backstop", re.IGNORECASE)
-FIXED_OFFSET = re.compile(r"timedelta\s*\(")
-EXPIRY = re.compile(r"expir", re.IGNORECASE)
 
 
 def deny(reason: str) -> None:
@@ -74,26 +68,13 @@ def main() -> None:
 
     if REFUND_API.search(text) and REFUND_ACK not in text:
         deny(
-            "Money invariant (decisions.md 2026-05-28): a Refund may only "
-            "reverse an already-captured charge. Capture-less paths must "
-            "capture (amount < hold) or void the authorization — never "
-            "refund. If this code genuinely refunds a captured charge, "
-            "assert the payment state is 'captured' and include the "
-            f"marker '{REFUND_ACK}' in the same edit."
-        )
-
-    if (
-        SETTLE_CODE.search(text)
-        and FIXED_OFFSET.search(text)
-        and not EXPIRY.search(text)
-    ):
-        deny(
-            "Money invariant (decisions.md 2026-05-28): the auto-settle "
-            "backstop is min(planner's settle target, earliest auth "
-            "expiry across attendees) — never a fixed post-event offset "
-            "alone. Auths expire 7 days after creation; a backstop past "
-            "expiry silently loses the capture. Reference auth expiry in "
-            "this scheduling code."
+            "Money invariant (decisions.md 2026-07-15): a Refund may only "
+            "reverse an already-collected charge (Payment state 'paid'). "
+            "Charge-at-close has no hold to void and no overage to "
+            "release, so a Refund is the only way money flows back. If "
+            "this genuinely refunds a collected charge, assert the "
+            f"payment state is 'paid' and include the marker '{REFUND_ACK}' "
+            "in the same edit."
         )
 
 

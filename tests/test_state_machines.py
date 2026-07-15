@@ -35,21 +35,18 @@ LEGAL: set[tuple[str, str, str]] = {
     ("rsvp", "pending", "going"),
     ("rsvp", "pending", "maybe"),
     ("rsvp", "pending", "declined"),
-    ("rsvp", "going", "going_paid"),
-    ("rsvp", "going_paid", "attended"),
-    ("rsvp", "going_paid", "no_show"),
+    ("rsvp", "going", "attended"),
+    ("rsvp", "going", "no_show"),
     ("rsvp", "maybe", "going"),
     ("rsvp", "maybe", "declined"),
     # late re-RSVP while event open — decisions.md 2026-07-08
     ("rsvp", "declined", "going"),
-    # Payment
-    ("payment", "none", "authorized"),
-    ("payment", "authorized", "captured"),
-    ("payment", "authorized", "voided"),
-    ("payment", "authorized", "failed"),
-    ("payment", "captured", "refunded"),
-    ("payment", "failed", "resolved"),
-    ("payment", "failed", "abandoned"),
+    # Payment — charge-at-close (decisions.md 2026-07-15)
+    ("payment", "none", "paid"),
+    ("payment", "none", "unpaid"),
+    ("payment", "unpaid", "paid"),
+    ("payment", "unpaid", "abandoned"),
+    ("payment", "paid", "refunded"),
     # Attendance
     ("attendance", "unconfirmed", "present"),
     ("attendance", "unconfirmed", "absent"),
@@ -84,7 +81,10 @@ def test_terminal_states_allow_nothing() -> None:
     terminals = {
         "event": {"archived", "cancelled"},
         "rsvp": {"attended", "no_show"},
-        "payment": {"voided", "refunded", "resolved", "abandoned"},
+        "payment": {
+            "refunded",
+            "abandoned",
+        },
         "attendance": {"present", "absent"},
     }
     for name, states in terminals.items():
@@ -94,16 +94,22 @@ def test_terminal_states_allow_nothing() -> None:
 
 class TestMoneyInvariants:
     """Transitions whose absence IS the money model — each maps to
-    a NON-NEGOTIABLE rule in CLAUDE.md / decisions.md."""
+    a NON-NEGOTIABLE rule in CLAUDE.md / decisions.md
+    (charge-at-close, 2026-07-15)."""
 
-    def test_no_refund_without_capture(self) -> None:
-        # A release of an uncaptured hold is a void, never a refund
-        assert not can_transition(PAYMENT, "authorized", "refunded")
+    def test_no_refund_of_uncollected_money(self) -> None:
+        # Refund reverses money actually collected; an unpaid or
+        # never-charged share has nothing to send back.
+        assert not can_transition(PAYMENT, "unpaid", "refunded")
+        assert not can_transition(PAYMENT, "none", "refunded")
 
-    def test_no_void_after_capture(self) -> None:
-        # Money moved; the only reversal of a capture is a refund
-        assert not can_transition(PAYMENT, "captured", "voided")
+    def test_no_silent_uncharge(self) -> None:
+        # Once paid, money only flows back via refund — a charge is
+        # never quietly downgraded to unpaid or none.
+        assert not can_transition(PAYMENT, "paid", "unpaid")
+        assert not can_transition(PAYMENT, "paid", "none")
 
-    def test_walk_in_direct_charge_deferred_in_v0(self) -> None:
-        # none → captured ships with walk-ins, not in v0
-        assert not can_transition(PAYMENT, "none", "captured")
+    def test_abandoned_is_terminal(self) -> None:
+        # Giving up is final; collecting later is a NEW attempt row
+        # (decisions.md 2026-07-08), not a move out of abandoned.
+        assert PAYMENT["abandoned"] == set()

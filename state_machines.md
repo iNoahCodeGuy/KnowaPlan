@@ -9,87 +9,105 @@ draft → open → closed → settled → archived
               cancelled
 
 - draft: planner is editing, link not yet shared
-- open: link shared, accepting RSVPs and authorizations
+- open: link shared, accepting RSVPs (card optional)
 - closed: RSVPs locked, event happening now or recently
-- settled: attendance marked, captures and voids complete
+- settled: attendance marked, charges complete (auto-charges made,
+  tap-to-pay links sent)
 - archived: 72h after settlement, read-only
-- cancelled: planner cancelled before settlement; all auths voided,
-  no captures
+- cancelled: planner cancelled before settlement; nothing charged (no
+  holds to void)
 
 Transitions:
 - draft → open: planner shares link
-- open → closed: automatic at event start time
+- open → closed: planner closes RSVPs manually, OR automatically when
+  settlement begins (planner starts marking attendance, or the settle
+  timer fires). NOT tied to event start — RSVPs and new joins stay
+  open through the game (decisions.md 2026-07-15)
 - closed → settled: manual (planner marks attendance) OR automatic
   (timer fires per planner's setting at event creation)
 - settled → archived: automatic, 72h after settled
-- open|closed → cancelled: planner action; auths voided immediately,
-  no captures. After settlement, reversals go through Payment
-  captured → refunded, not cancellation
+- open|closed → cancelled: planner action; nothing charged (no holds).
+  After settlement, reversals go through Payment paid → refunded, not
+  cancellation
 
 ## RSVP
-pending → going → going_paid → attended | no_show
+pending → going → attended | no_show
        → maybe → going | declined
        → declined → going (while event still open)
 
 - pending: invitee clicked link but hasn't responded
-- going: said yes, card authorized
-- going_paid: said yes, card authorized successfully
-- maybe: tentative; converted on reminder or by deadline
+- going: said yes. A card on file is OPTIONAL and tracked on the
+  Payment row, not here — a `going` attendee may or may not have saved
+  a card (decisions.md 2026-07-15); the roster shows whether they have
+- maybe: tentative; converts on reminder or by deadline
 - declined: said no; may still convert to going while the event is
-  open — requires a fresh card authorization, same as any RSVP
-  (decisions.md 2026-07-08). Not terminal
-- attended: planner marked present, capture executed
-- no_show: planner marked absent, authorization voided
+  open — no card required to say going (a card is optional and, if
+  added, charged at close). Not terminal
+- attended: planner marked present; their share is charged at close
+- no_show: planner marked absent; nothing charged (no hold to void)
 
 ## Payment (per attendee per event)
-none → authorized → captured → refunded
-                 ↘ voided
-                 ↘ failed → resolved
-                          → abandoned
+none → paid → refunded
+   ↘ unpaid → paid
+            → abandoned
 
-- none: no card on file yet
-- authorized: PaymentIntent created with manual capture; hold placed
-  for the worst-case share
-- captured: actual share charged (≤ authorized). Capturing less than
-  the authorized worst-case RELEASES the uncaptured remainder
-  automatically — this is NOT a refund and produces no Refund object
-- voided: authorization released without any capture — no-show,
-  attendee removed before capture, event cancelled before capture, or
-  the 7-day auth window expired. No money moved. Terminal
-- refunded: reversal of an already-captured charge only (event
-  cancelled after capture, or planner discretion). Terminal
-- failed: capture attempt failed (card declined, expired, etc.)
-- resolved: post-failure payment completed via SMS settle-up link
-- abandoned: 7-day grace period expired; planner notified to chase
-  manually
+Charge-at-close (decisions.md 2026-07-15): no authorization, no hold.
+The share is charged at close from a card saved at RSVP, or collected
+via a tap-to-pay link.
+
+- none: no charge yet. Also the terminal state for no-shows and events
+  cancelled before close — nothing owed, nothing charged
+- paid: the attendee's actual share was charged — automatically from a
+  card saved at RSVP, or via the tap-to-pay link. Terminal except for
+  refund
+- unpaid: close happened and the share was not collected — no card on
+  file, or a saved-card charge declined off-session at close. The
+  planner sends a tap-to-pay link (one auto-nudge at +24h, then on
+  demand). Shows on the roster. Not terminal
+- abandoned: the planner stopped chasing. Terminal
+- refunded: reversal of a collected charge — planner discretion, or a
+  re-split after a late walk-in lowered shares AFTER a charge landed.
+  Terminal
 
 Transitions:
-- none → authorized: RSVP accepted, card authorized (hold placed)
-- authorized → captured: attendance confirmed; capture actual share
-- authorized → voided: no-show, removed pre-capture, event cancelled
-  pre-capture, or auth window expired
-- authorized → failed: capture attempted but declined/expired
-- captured → refunded: reverse an already-captured charge
-- failed → resolved: attendee pays via SMS settle-up link
-- failed → abandoned: 7-day grace expired, still unpaid
+- none → paid: card on file, charged successfully at close
+- none → unpaid: close with no card, or a saved-card charge declined
+- unpaid → paid: attendee pays via the tap-to-pay link
+- unpaid → abandoned: planner stops chasing
+- paid → refunded: reverse a collected charge
 
-Re-authorization after a terminal state (voided, abandoned) is a NEW
-payment instance — the next attempt row — not a transition out of a
-terminal state (decisions.md 2026-07-08).
+A charge that lands `unpaid` and is later retried is the SAME Payment
+row (same idempotency key on retry); a genuinely new attempt (e.g. a
+re-added attendee) is a new row with the next attempt number
+(decisions.md 2026-07-08, still in force).
 
-Deferred (v0) — revisit before opening to strangers:
-- requires_action: a 3DS/SCA challenge can occur on authorize. Not
-  modeled in v0 (friend-group cards rarely trigger it). When added,
-  it sits between none and authorized
-- Walk-in direct charge (none → captured, no prior authorization —
-  see scenarios.md): documented but not built in v0. Add the
-  none → captured transition when walk-ins ship
+Mechanism — record-first (decisions.md 2026-07-13, adapted): the
+charge stamps intent (a charge-requested timestamp) in the same DB
+transaction as the matching attendance change, BEFORE the Stripe call;
+the terminal state is written after Stripe answers. A dangling charge
+(stamp set, state still none) is queryable, surfaced to the planner,
+and retried with the SAME idempotency key. The DB always knows at
+least as much as Stripe.
+
+Superseded by the 2026-07-15 pivot: `authorized`, `voided`,
+`auth_failed`, `failed → resolved`, the capture-≤-hold ceiling, and
+the release-vs-refund distinction — all belonged to the hold model and
+no longer exist. No holds means no authorization to place, expire, or
+void.
+
+Deferred (v0):
+- 3DS/SCA on an off-session charge: a saved-card charge at close can in
+  principle require the customer present. Rare for US friend-group
+  cards; if it trips, the attendee falls to `unpaid` and pays via the
+  link (which is on-session). Not separately modeled in v0
 
 ## Attendance
 unconfirmed → present | absent
 
 - unconfirmed: event not yet settled
 - present: planner marked attended OR auto-defaulted to attended
-  via settlement default; capture eligible
+  via settlement default; charge eligible
 - absent: planner marked absent OR auto-defaulted to absent via
-  settlement default; authorization voided
+  settlement default; not charged (no hold to void)
+
+  
