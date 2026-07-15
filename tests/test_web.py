@@ -25,9 +25,10 @@ SAM_PHONE = "+15550000002"
 
 @pytest.fixture
 def planner_account(monkeypatch: pytest.MonkeyPatch) -> str:
-    """The demo's one required config; the autouse blanking fixture
-    ran first, so this wins for tests that opt in."""
-    monkeypatch.setenv("TEST_PLANNER_ACCOUNT_ID", "acct_demo")
+    """The demo's required config; the autouse blanking fixture
+    ran first, so these win for tests that opt in."""
+    monkeypatch.setenv("PLANNER_ACCOUNT_ID", "acct_demo")
+    monkeypatch.setenv("CREATE_PASSWORD", "letmein")
     return "acct_demo"
 
 
@@ -40,6 +41,7 @@ def _form(**overrides: str) -> dict[str, str]:
         "total_cost_dollars": "120",
         "goal_attendance": "4",
         "settle_default": "assume_all_attended",
+        "create_password": "letmein",
     }
     form.update(overrides)
     return form
@@ -135,15 +137,46 @@ async def test_bad_form_input_is_a_400(
     assert "error" in resp.text
 
 
-async def test_missing_account_config_fails_loudly(
+async def test_unset_create_password_fails_closed(
     client: AsyncClient,
 ) -> None:
-    # No planner_account fixture: the autouse blank stands in for
-    # a demo machine with no .env — creation must refuse, not
-    # defer the surprise to settlement.
+    # No fixture: the autouse blanks stand in for a host with no
+    # CREATE_PASSWORD — the public create page must stay locked,
+    # not open (real money routes through created events).
     resp = await client.post("/events", data=_form())
     assert resp.status_code == 400
-    assert "TEST_PLANNER_ACCOUNT_ID" in resp.text
+    assert "CREATE_PASSWORD" in resp.text
+
+
+async def test_wrong_create_password_refused(
+    client: AsyncClient, planner_account: str
+) -> None:
+    resp = await client.post(
+        "/events", data=_form(create_password="nope")
+    )
+    assert resp.status_code == 400
+    assert "password" in resp.text
+
+
+async def test_missing_account_config_fails_loudly(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Gate passes, account id still blank: creation must refuse
+    # at the FIRST step, not defer the surprise to settlement.
+    monkeypatch.setenv("CREATE_PASSWORD", "letmein")
+    resp = await client.post("/events", data=_form())
+    assert resp.status_code == 400
+    assert "PLANNER_ACCOUNT_ID" in resp.text
+
+
+async def test_password_never_echoed_on_failed_form(
+    client: AsyncClient, planner_account: str
+) -> None:
+    resp = await client.post(
+        "/events", data=_form(total_cost_dollars="abc")
+    )
+    assert resp.status_code == 400
+    assert "letmein" not in resp.text
 
 
 async def test_planner_reused_by_phone(

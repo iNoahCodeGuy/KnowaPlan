@@ -24,6 +24,9 @@
   <input id="goal_attendance" name="goal_attendance" type="number"
          min="1" required
          value="{{ form.get('goal_attendance', '') }}">
+  <label for="create_password">Create password</label>
+  <input id="create_password" name="create_password"
+         type="password" required>
   <label for="settle_default">If I never mark attendance</label>
   <select id="settle_default" name="settle_default">
     <option value="assume_all_attended">

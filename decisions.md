@@ -387,3 +387,24 @@ own column, making cross-purpose reuse structurally impossible. No
 collision-retry loop: the unique index converts astronomically-
 unlikely (birthday bound ~1e-27 at a million rows) into
 loudly-enforced.
+
+## 2026-07-16: Public create page gated; planner account setting renamed
+**Context:** live dogfood deploys the app to a public HTTPS host
+(first real-money event targeted for 2026-07-29). Every event
+routes charges into the planner's connected account, so an open
+create page would let a stranger take card payments through the
+owner's Stripe — unacceptable surface once live keys exist.
+**Chose:** an env-set create password (CREATE_PASSWORD), checked
+with a constant-time compare (secrets.compare_digest over
+encoded bytes) on POST /events; unset = creation refused, fail
+closed; the password is never echoed into a re-rendered form.
+**Alternatives:** a capability create-URL (one eternal token
+that lands in browser history and server logs — a password
+rotates naturally and lives only in the planner's head); leaving
+it open (contradicts correctness-over-speed with live keys).
+**Also:** test_planner_account_id → planner_account_id
+(PLANNER_ACCOUNT_ID). The live CONNECTED account id must not
+live in a variable named "test", and the comment now pins the
+platform-vs-connected distinction: this is the account that
+RECEIVES money (transfer_data.destination), never the platform's
+own id — Stripe rejects a destination of self.

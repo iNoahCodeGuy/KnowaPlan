@@ -9,6 +9,7 @@ the Stripe Payment Element island on /r/. Errors render HTML with
 real status codes — the audience is someone tapping a texted
 link, not an API client.
 """
+import secrets
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -164,6 +165,7 @@ async def create_event(
     total_cost_dollars: str = Form(...),
     goal_attendance: int = Form(...),
     settle_default: str = Form(...),
+    create_password: str = Form(""),
 ) -> Response:
     form = {
         "planner_name": planner_name,
@@ -176,6 +178,8 @@ async def create_event(
     }
 
     def fail(message: str) -> Response:
+        # `form` never carries the password — a failed re-render
+        # must not echo it back into the page.
         return templates.TemplateResponse(
             request,
             "create_event.html",
@@ -183,6 +187,20 @@ async def create_event(
             status_code=400,
         )
 
+    settings = get_settings()
+    # Gate FIRST: on a public host, creating an event routes real
+    # money into the planner's Stripe — strangers must not mint
+    # events. Unset password = creation refused (fail closed).
+    if not settings.create_password:
+        return fail(
+            "CREATE_PASSWORD is not configured — set it in .env; "
+            "event creation stays locked without it"
+        )
+    if not secrets.compare_digest(
+        create_password.encode(),
+        settings.create_password.encode(),
+    ):
+        return fail("wrong create password")
     planner_name = planner_name.strip()
     planner_phone = planner_phone.strip()
     title = title.strip()
@@ -197,13 +215,13 @@ async def create_event(
         return fail("goal attendance must be at least 1")
     if settle_default not in SETTLE_DEFAULTS:
         return fail("unknown settle default")
-    account_id = get_settings().test_planner_account_id
+    account_id = settings.planner_account_id
     if not account_id:
-        # The demo's one piece of required config fails at the
-        # FIRST step, loudly — not at settlement.
+        # Required config fails at the FIRST step, loudly — not
+        # at settlement.
         return fail(
-            "TEST_PLANNER_ACCOUNT_ID is not configured — set it "
-            "in .env before creating events"
+            "PLANNER_ACCOUNT_ID is not configured — set it in "
+            ".env before creating events"
         )
     planner = (
         await session.execute(

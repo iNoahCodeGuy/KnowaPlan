@@ -28,7 +28,8 @@ def no_live_stripe(monkeypatch: pytest.MonkeyPatch) -> None:
     reads the .env file itself, and only a PRESENT env var overrides
     it; deleting would let the real key from .env through."""
     monkeypatch.setenv("STRIPE_SECRET_KEY", "")
-    monkeypatch.setenv("TEST_PLANNER_ACCOUNT_ID", "")
+    monkeypatch.setenv("PLANNER_ACCOUNT_ID", "")
+    monkeypatch.setenv("CREATE_PASSWORD", "")
 
 
 @pytest.fixture

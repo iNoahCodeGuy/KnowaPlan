@@ -37,4 +37,5 @@ def test_settings_never_see_live_credentials() -> None:
 
     settings = get_settings()
     assert settings.stripe_secret_key == ""
-    assert settings.test_planner_account_id == ""
+    assert settings.planner_account_id == ""
+    assert settings.create_password == ""

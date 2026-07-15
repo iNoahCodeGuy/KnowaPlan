@@ -15,13 +15,17 @@ real money.
 
        STRIPE_SECRET_KEY=sk_test_...
        STRIPE_PUBLISHABLE_KEY=pk_test_...
-       TEST_PLANNER_ACCOUNT_ID=acct_...
+       PLANNER_ACCOUNT_ID=acct_...
+       CREATE_PASSWORD=pick-something
        # optional; this is the default:
        # DATABASE_URL=postgresql+asyncpg://localhost:5432/knowaplan
 
-   TEST_PLANNER_ACCOUNT_ID is a TEST-MODE Stripe Connect
-   (Standard) connected account on the platform — the same kind
-   skeleton_02 proved the destination-charge flow against.
+   PLANNER_ACCOUNT_ID is the CONNECTED account — the Stripe
+   Connect (Standard) account that RECEIVES the money — NOT the
+   platform's own account id (Stripe refuses a destination of
+   self). Test-mode connected acct here; the live one arrives at
+   live dogfood. CREATE_PASSWORD gates the public create page:
+   without it, event creation is refused (fail closed).
 
 3. Create the schema, boot the app:
 
@@ -33,7 +37,8 @@ real money.
 Use a second browser window (or incognito) whenever you switch
 from planner to attendee — the links are the only identity.
 
-1. **Create**: http://localhost:8000/ — you're the planner.
+1. **Create**: http://localhost:8000/ — you're the planner
+   (enter your CREATE_PASSWORD in the form's password field).
    Total cost 120, goal 4 → the group sees a $30.00 estimate.
    You land on the admin page: **bookmark it** (whoever holds the
    admin link IS the planner).
@@ -90,7 +95,9 @@ Alembic.)
 
 | Symptom | Fix |
 | --- | --- |
-| Event create: "TEST_PLANNER_ACCOUNT_ID is not configured" | Set it in `.env`; restart uvicorn |
+| Event create: "CREATE_PASSWORD is not configured" | Set it in `.env`; restart uvicorn |
+| Event create: "wrong create password" | Type the CREATE_PASSWORD value into the form's password field |
+| Event create: "PLANNER_ACCOUNT_ID is not configured" | Set it in `.env`; restart uvicorn |
 | "Add a card": STRIPE_SECRET_KEY error | Set the test secret key in `.env` |
 | /r/ says card saving isn't configured | Set STRIPE_PUBLISHABLE_KEY in `.env` |
-| Charge fails mentioning transfer/destination | TEST_PLANNER_ACCOUNT_ID isn't a connected Standard account on this platform (test mode) |
+| Charge fails mentioning transfer/destination | PLANNER_ACCOUNT_ID isn't a CONNECTED Standard account on this platform (or is the platform's own id) |

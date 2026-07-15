@@ -26,7 +26,17 @@ class Settings(BaseSettings):
     # secret and cannot move money; still env-configured, never
     # hardcoded.
     stripe_publishable_key: str = ""
-    test_planner_account_id: str = ""
+    # The planner's Stripe Connect (Standard) CONNECTED account —
+    # the account that RECEIVES the group's money (destination
+    # charges point transfer_data.destination at it). NOT the
+    # platform's own account id: Stripe rejects a destination of
+    # self. Test-mode acct for the demo; live acct at dogfood.
+    planner_account_id: str = ""
+    # Gate for the public create-event page: on a deployed host,
+    # event creation routes real money into the planner's Stripe,
+    # so strangers must not mint events. Unset = creation refused
+    # (fail closed).
+    create_password: str = ""
 
 
 def get_settings() -> Settings:
