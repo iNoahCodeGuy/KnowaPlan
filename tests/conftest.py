@@ -7,6 +7,7 @@ tests take the `mock_stripe` fixture instead of the real SDK.
 from unittest.mock import MagicMock
 
 import pytest
+import stripe as real_stripe
 
 
 @pytest.fixture(autouse=True)
@@ -19,9 +20,15 @@ def no_live_stripe(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def mock_stripe() -> MagicMock:
-    """Stand-in for the stripe module: payment code under test gets
-    this injected, and assertions run against the recorded calls."""
+def mock_stripe(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Stand-in for the stripe module, injected into app.payments:
+    the code under test talks to this, and assertions run against
+    the recorded calls. except-clauses need REAL exception classes
+    (a MagicMock attribute cannot be caught), so those come from the
+    SDK — importing it makes no network call."""
     stripe = MagicMock(name="stripe")
     stripe.api_key = "sk_test_mocked"
+    stripe.CardError = real_stripe.CardError
+    stripe.StripeError = real_stripe.StripeError
+    monkeypatch.setattr("app.payments.stripe", stripe)
     return stripe

@@ -4,13 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models import Attendee, Payment
+from app.models import Payment
 from app.payments import (
     charge_share,
     create_payment_link,
-    create_setup_intent,
     poll_link_status,
-    record_saved_card,
     refund_charge,
 )
 
@@ -24,14 +22,13 @@ def test_health() -> None:
 
 async def test_payment_stubs_are_unwritten() -> None:
     """Money-moving bodies are authored with review (CLAUDE.md);
-    until then they must refuse loudly, never no-op."""
-    a = Attendee()
+    until then they must refuse loudly, never no-op. Implemented
+    functions graduate to tests/test_payments.py and leave this
+    list; refund_charge stays until walk-ins ship."""
     p = Payment()
     # Build each coroutine inside the loop: pre-building the tuple
     # would leak never-awaited coroutines if an early case fails
     cases = (
-        (create_setup_intent, (a,)),
-        (record_saved_card, (a, "seti_x")),
         (charge_share, (p, 3200)),
         (create_payment_link, (p, 3200)),
         (poll_link_status, (p,)),

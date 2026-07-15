@@ -42,7 +42,22 @@ Invariants every body must keep:
 - Never call the live Stripe API in tests — inject a mock (conftest
   mock_stripe).
 """
+import stripe
+
+from app.config import get_settings
 from app.models import Attendee, Payment
+
+
+class CardSaveFailed(Exception):
+    """The SetupIntent did not succeed — the attendee retries with
+    another card or proceeds cardless (scenarios.md: card fails to
+    save at RSVP). Carries the SetupIntent status."""
+
+
+def _configure() -> None:
+    # Lazy on purpose: tests blank the key and inject a mock module
+    # (conftest); the real key is read only when a call is made.
+    stripe.api_key = get_settings().stripe_secret_key
 
 
 async def create_setup_intent(attendee: Attendee) -> str:
@@ -50,7 +65,23 @@ async def create_setup_intent(attendee: Attendee) -> str:
     Customer (creating the Customer first if needed) and return its
     client_secret for the browser's Payment Element. Moves no money;
     usage="off_session" so any 3DS runs on-session, now."""
-    raise NotImplementedError("author with review — CLAUDE.md")
+    _configure()
+    if attendee.stripe_customer_id is None:
+        # Platform-side Customer — destination charges require the
+        # payment method to live on the platform (skeleton_02).
+        customer = await stripe.Customer.create_async(
+            name=attendee.name,
+            phone=attendee.phone,
+            metadata={"attendee_id": str(attendee.id)},
+        )
+        attendee.stripe_customer_id = customer.id
+    intent = await stripe.SetupIntent.create_async(
+        customer=attendee.stripe_customer_id,
+        usage="off_session",
+        payment_method_types=["card"],
+        metadata={"attendee_id": str(attendee.id)},
+    )
+    return intent.client_secret
 
 
 async def record_saved_card(
@@ -60,7 +91,22 @@ async def record_saved_card(
     SetupIntent (never trust the client for the id), assert its
     status is 'succeeded', and persist
     attendee.stripe_payment_method_id."""
-    raise NotImplementedError("author with review — CLAUDE.md")
+    if attendee.stripe_customer_id is None:
+        raise ValueError(
+            "attendee has no Stripe customer — no card save to "
+            "finalize"
+        )
+    _configure()
+    intent = await stripe.SetupIntent.retrieve_async(setup_intent_id)
+    if intent.customer != attendee.stripe_customer_id:
+        # A tampered id must not attach someone else's card.
+        raise ValueError(
+            "SetupIntent does not belong to this attendee"
+        )
+    if intent.status != "succeeded":
+        raise CardSaveFailed(intent.status)
+    attendee.stripe_payment_method_id = intent.payment_method
+    return attendee
 
 
 async def charge_share(payment: Payment, actual_cents: int) -> Payment:
