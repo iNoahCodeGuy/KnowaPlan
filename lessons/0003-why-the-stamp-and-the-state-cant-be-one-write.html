@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 3 — Why the stamp and the state can't be one write</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Why the stamp and the state can't be one write</h1>
+<p class="subtitle">Lesson 3 · ~10 minutes · The reason
+<code>settle_event</code> commits exactly where it does</p>
+
+<p>Back to Row 2 of Lesson 1 — the one you learned to fear. You pressed
+Settle, the page hung, the wifi dropped. Marcus's row read
+<code>state=none</code> with the charge stamp <em>set</em>: we'd written
+down “about to take $30” and never heard back. You learned to
+<strong>recognise</strong> it and press Retry.</p>
+
+<p>This lesson is the other half: <strong>why that row is allowed to
+exist at all</strong> — and why it's the honest design, not a hole in
+it. By the end you'll look at the one <code>await&nbsp;session.commit()</code>
+inside <a href="../app/settlement.py">settle_event</a> and know that
+moving it three lines down would be a money bug.</p>
+
+<h2>The wish</h2>
+
+<p>Wouldn't it be nicer if there were no gap? Do the whole thing as one
+indivisible step: <em>stamp the intent, charge the card, write
+<code>paid</code></em> — all together, so a crash leaves you either
+<strong>fully done</strong> or <strong>fully untouched</strong>, never
+half. No dangling row, ever.</p>
+
+<p class="note">You designed the thing this lesson explains.
+<a href="../decisions.md">decisions.md</a> 2026-07-13, “Record-first
+money movement.” You wrote <em>why</em>; here is the <em>mechanism</em>
+underneath it.</p>
+
+<p>That indivisible step has a real name in your database. It's called a
+<strong>transaction</strong>, and understanding it is the whole lesson.</p>
+
+<h2>What a transaction actually is</h2>
+
+<p>A <strong>transaction</strong> groups a set of database writes so they
+land <strong>all together or not at all</strong>. The word for that
+property is <strong>atomic</strong> — indivisible. You
+<code>commit()</code> to make the whole group permanent; you
+<code>rollback()</code> to throw the whole group away.</p>
+
+<p>You already lean on this. <a href="../app/settlement.py">mark_attendance</a>
+flips the RSVP machine (<code>going → attended</code>) <em>and</em> the
+attendance machine (<code>unconfirmed → present</code>) in
+<strong>one commit</strong> — so the database can never show one without
+the other. “A charge and its matching attendance update happen together”
+— that word <em>together</em>, in your own rules, means <em>one
+transaction</em>.</p>
+
+<p>Here's atomic being atomic. Two writes — mark Marcus present, stamp the
+$30 intent — with a crash wedged between them. I ran this
+(<code>sqlite3</code>, nothing mocked):</p>
+
+<pre><code>start:                  (0, None)
+crash (lost wifi at the court):
+after crash + rollback: (0, None)   &lt;- present rolled back to 0 too
+after clean commit:     (1, 3000)</code></pre>
+
+<div class="callout">
+  <span class="label">The thing to notice</span>
+  The first write — <code>present = 1</code> — <em>succeeded</em>. It ran,
+  it was real inside the transaction. Then the crash hit and
+  <code>rollback()</code> undid it <strong>anyway</strong>, back to
+  <code>0</code>, because it was never committed. That's atomic:
+  uncommitted work isn't “mostly done,” it's <strong>nothing</strong>.
+</div>
+
+<h2>Why the wish is impossible</h2>
+
+<p>Here's the catch that kills the one-write dream. A transaction can only
+roll back things that live <strong>inside your database</strong>. Your
+<code>rollback()</code> can un-write a row. It <strong>cannot un-charge a
+card.</strong></p>
+
+<p>Stripe is not inside your database. It's another company's computers,
+reached over the network — the same boundary Lesson 2 was about (your
+platform account is one side, Stripe the other). So the instant you put
+“charge the card” <em>between</em> two DB writes and keep the transaction
+open, you've built a trap.</p>
+
+<p>Watch the trap spring. This reads <code>in_transaction()</code> — is
+the database still mid-transaction, uncommitted? — at the exact moment the
+(stand-in) Stripe call fires:</p>
+
+<pre><code>[    one-write] at the Stripe call, db.in_transaction() = True
+[ record-first] at the Stripe call, db.in_transaction() = False</code></pre>
+
+<p>The <code>one-write</code> line is the trap. <code>in_transaction() =
+True</code> means the stamp is written but <strong>not committed</strong>
+while money is moving. If the process dies right there — after Stripe
+takes the $30, before your <code>commit()</code> — the database rolls the
+stamp back to nothing, and now <strong>money moved that your database has
+no record of.</strong></p>
+
+<div class="callout">
+  <span class="label">This is the one outcome your rules forbid</span>
+  “The DB must always know at least as much as Stripe.” One-write breaks
+  it in the worst direction: Stripe knows about $30, your database knows
+  about nothing. You'd find out by angry text and reconcile it by hand in
+  the Stripe dashboard — exactly the 8pm-at-the-court nightmare
+  <a href="../MISSION.md">MISSION.md</a> is written against.
+</div>
+
+<h2>So you pick which side of the gap to be safe on</h2>
+
+<p>You can't make the charge atomic with the writes — the charge is at
+Stripe, outside the transaction's reach. The gap is <strong>unavoidable</strong>.
+What you <em>get</em> to choose is which side of it you're standing on when
+a crash hits:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><strong>Charge first</strong>, record after</td>
+    <td>Crash in the gap → money moved, <span class="hot">no DB
+    trace</span>. Invisible. The forbidden outcome.</td></tr>
+<tr><td><strong>Record first</strong>, charge after</td>
+    <td>Crash in the gap → stamp committed, state still
+    <code>none</code>: a <span class="hot">dangling row</span>. Visible,
+    queryable, retryable.</td></tr>
+</tbody>
+</table>
+
+<p>Record-first is the <code>record-first</code> line above:
+<code>in_transaction() = False</code> at the Stripe call, because you
+<strong>committed the intent first</strong>. If the process dies now, the
+stamp survives. The gap still exists — that surviving stamp with no answer
+yet <em>is</em> Row 2, the dangling charge — but now it's a
+<strong>known unknown</strong>: “we said we'd take $30; we don't yet know
+if it landed.” The database knew before Stripe did.</p>
+
+<p>That's the honest option, and it's the only one. Not because the gap
+went away — because you moved it somewhere you can <em>see</em>.</p>
+
+<p>Here it is in your real code (<a href="../app/settlement.py">settle_event</a>),
+trimmed to the bones:</p>
+
+<pre><code>payment = Payment(
+    ...,
+    charge_requested_at=datetime.now(timezone.utc),
+    charge_requested_cents=charge,
+)
+session.add(payment)
+await session.commit()     # &lt;- intent durable HERE, before any money moves
+...
+await _collect(session, payment, attendee, planner, cents, ...)  # Stripe</code></pre>
+
+<p>That <code>commit()</code> above the Stripe call is the entire design.
+Slide it below <code>_collect</code> and you've rebuilt charge-first — the
+invisible-gap version. Which is why there's a test standing guard over its
+position, and we'll meet it in the quiz.</p>
+
+<h2>Check yourself</h2>
+
+<p>One shot each. The wrong answers are where the mechanism lives, so
+commit and then read why.</p>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="both">
+  <div class="quiz-stem"><span class="n">1</span>A transaction is
+  <strong>atomic</strong>. In plain terms, that means:</div>
+  <div class="quiz-choices">
+    <button data-key="both">Both writes or neither</button>
+    <button data-key="first">Whichever write ran first</button>
+    <button data-key="fast">The single fastest write</button>
+    <button data-key="one">One write at once</button>
+  </div>
+  <div class="quiz-fb" data-key="both"><span class="verdict">Right</span>
+    — all-or-nothing. The demo proved it: <code>present=1</code> ran
+    successfully and still rolled back, because the group never
+    committed. Uncommitted work is nothing, not “partly done.”</div>
+  <div class="quiz-fb" data-key="first"><span class="verdict">No</span>
+    — order within the transaction doesn't matter to the outcome. If it
+    doesn't commit, <em>every</em> write in the group vanishes, first one
+    included.</div>
+  <div class="quiz-fb" data-key="fast"><span class="verdict">No</span>
+    — atomic is about all-or-nothing, not speed. A transaction can hold
+    a hundred slow writes; they still land together or not at all.</div>
+  <div class="quiz-fb" data-key="one"><span class="verdict">No</span>
+    — a transaction usually groups <em>many</em> writes. The point isn't
+    one-at-a-time; it's that the whole batch is indivisible.</div>
+</div>
+
+<div class="quiz-q" data-answer="uncharge">
+  <div class="quiz-stem"><span class="n">2</span>Why can't the Stripe
+  charge just go <em>inside</em> the DB transaction with the writes?</div>
+  <div class="quiz-choices">
+    <button data-key="uncharge">Rollback can't un-charge cards</button>
+    <button data-key="slow">Stripe simply runs slowly</button>
+    <button data-key="forbid">Transactions forbid network calls</button>
+    <button data-key="norollback">Stripe lacks a rollback</button>
+  </div>
+  <div class="quiz-fb" data-key="uncharge"><span class="verdict">Right</span>
+    — a transaction's power stops at your database's edge.
+    <code>rollback()</code> un-writes rows; it has no reach into Stripe's
+    computers, so it can't undo a charge that already left. That
+    asymmetry is the whole reason the gap can't be closed.</div>
+  <div class="quiz-fb" data-key="slow"><span class="verdict">No</span>
+    — speed isn't the problem. Even an instant charge couldn't be rolled
+    back by your database, and that's what matters.</div>
+  <div class="quiz-fb" data-key="forbid"><span class="verdict">No — and
+    this is the tempting one</span>
+    — nothing <em>forbids</em> you from calling Stripe mid-transaction;
+    the code would run. It's just unsafe, because a crash then strands
+    money outside a rolled-back DB. The rule is yours, not the
+    database's.</div>
+  <div class="quiz-fb" data-key="norollback"><span class="verdict">No</span>
+    — Stripe <em>does</em> have reversals (refunds, cancels). The problem
+    isn't that Stripe can't undo; it's that <em>your DB's</em> rollback
+    can't reach across the network to trigger one.</div>
+</div>
+
+<div class="quiz-q" data-answer="trace">
+  <div class="quiz-stem"><span class="n">3</span>You commit the stamp
+  <em>before</em> charging so that a crash in the gap leaves:</div>
+  <div class="quiz-choices">
+    <button data-key="trace">A queryable trace</button>
+    <button data-key="untraced">An untraced charge</button>
+    <button data-key="noattempt">No charge attempted</button>
+    <button data-key="rollback">A full rollback</button>
+  </div>
+  <div class="quiz-fb" data-key="trace"><span class="verdict">Right</span>
+    — the dangling row: stamp set, <code>state=none</code>. You can
+    <em>find</em> it with a query, show it on the roster, and retry it
+    with the same idempotency key. A known unknown beats an unknown
+    unknown, every time.</div>
+  <div class="quiz-fb" data-key="untraced"><span class="verdict">No</span>
+    — that's the outcome of the <em>other</em> order (charge first). It's
+    precisely what record-first exists to prevent. Read the two-row table
+    again.</div>
+  <div class="quiz-fb" data-key="noattempt"><span class="verdict">No</span>
+    — you can't promise that. The charge may well have gone through; you
+    just don't know yet. Assuming “nothing happened” is how you
+    double-charge Marcus (Lesson 1, Row 2).</div>
+  <div class="quiz-fb" data-key="rollback"><span class="verdict">No</span>
+    — the stamp was <em>committed</em> before the charge, so it does
+    <strong>not</strong> roll back. That surviving stamp is the whole
+    point — it's the trace.</div>
+</div>
+
+<div class="quiz-q" data-answer="durable">
+  <div class="quiz-stem"><span class="n">4</span>Your test asserts that at
+  the instant <code>settle_event</code> calls Stripe,
+  <code>db.in_transaction()</code> is <code>False</code>. Why does that
+  matter?</div>
+  <div class="quiz-choices">
+    <button data-key="durable">The intent is durable</button>
+    <button data-key="succeeded">The charge already succeeded</button>
+    <button data-key="closed">The session got closed</button>
+    <button data-key="settled">The event is settled</button>
+  </div>
+  <div class="quiz-fb" data-key="durable"><span class="verdict">Right</span>
+    — <code>False</code> means no uncommitted work is open: the stamp was
+    already committed. So if the process dies during the Stripe call, the
+    intent survives. Move the <code>commit()</code> after the charge and
+    this flips to <code>True</code> — the test goes red, on purpose,
+    guarding the ordering.</div>
+  <div class="quiz-fb" data-key="succeeded"><span class="verdict">No</span>
+    — <code>in_transaction()</code> is about your <em>database</em>, not
+    Stripe. It's checked <em>before</em> Stripe answers; it says nothing
+    about whether the charge worked.</div>
+  <div class="quiz-fb" data-key="closed"><span class="verdict">No</span>
+    — the session is still open and usable (it writes the outcome right
+    after). Not in a transaction ≠ closed; it just means the last commit
+    already flushed everything to disk.</div>
+  <div class="quiz-fb" data-key="settled"><span class="verdict">No</span>
+    — the event reaches <code>settled</code> only at the very end of
+    <code>settle_event</code>, long after this charge. Wrong machine,
+    wrong moment.</div>
+</div>
+
+</section>
+
+<h2>What you can now do</h2>
+
+<p>Look at <code>settle_event</code> and read the <code>commit()</code>
+placement as <em>intent</em>, not plumbing. You can say why the dangling
+row from Lesson 1 exists, why it's honest, and why the single most
+dangerous edit to this file is sliding one commit past one Stripe call.</p>
+
+<div class="sourcebox">
+  <span class="label">Read next — and <em>run</em> it</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="../tests/test_settlement.py"><strong>test_stamps_commit_before_stripe_is_called</strong></a>
+  — your own suite</p>
+  <p style="margin:0;font-size:.87rem">The highest-trust source for how
+  <em>your</em> system behaves is your system. This test reads
+  <code>in_transaction()</code> at the Stripe call and asserts
+  <code>False</code>. Run <code>.venv/bin/pytest -k
+  stamps_commit_before_stripe</code>, watch it pass, then imagine moving
+  the commit and re-read the assertion. That's the guardrail in
+  executable form.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">A source I could not verify this session</span>
+  The canonical outside references — SQLAlchemy's <em>AsyncSession</em>
+  page and PostgreSQL's <em>transactions</em> tutorial — are the proper
+  primary sources for <code>commit()</code>/<code>rollback()</code> and
+  atomicity. This environment's network policy blocked both hosts
+  (a proxy <code>403</code>, not a bad link), so I taught the mechanism
+  from runnable demos and your own test instead — nothing here rests on
+  my memory. Verify those two pages yourself when you're on an open
+  network; the RESOURCES.md gap stays open until you do.
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Good ones right now: <em>“what's a flush, and how's it different from a
+  commit?”</em> · <em>“show me the demo scripts so I can run them.”</em> ·
+  <em>“what does the retry actually re-send, and why the same idempotency
+  key?”</em> Vague is fine too (“I don't get why present rolled back”).</div>
+
+<div class="footer">
+  <p><strong>Next up</strong> — the natural sequel is
+  <em>reading <code>settle_event</code> end to end</em>: the per-attendee
+  loop, how one friend's decline or API blip is contained without
+  aborting the rest, and the never-charge-the-planner skip. This lesson
+  gave you the commit; that one gives you the whole choreography around
+  it.</p>
+  <p><a href="0002-where-the-money-actually-goes.html">← Lesson 2</a> ·
+     <a href="0001-read-the-payment-row.html">Lesson 1</a> ·
+     <a href="../MISSION.md">Mission</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../decisions.md">decisions.md</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
