@@ -448,3 +448,68 @@ event start (scenarios.md) is a TIMER job and defers with the
 scheduler (2026-07-13 deferred list, clarified here) — the settle
 preview warns about stale maybes instead; a maybe who played taps
 Going on their own link while the event is open.
+
+## 2026-07-16: Checkout success_url threaded from the request host
+**Found:** the first smoke walk on the owner's real machine (test
+keys, owner's Stripe account) broke every tap-to-pay mint:
+`Missing required param: success_url.` create_payment_link omitted
+success_url on the assumption Stripe's hosted confirmation page
+covers it; the owner's account requires the param on EVERY API
+version tested (2024-04-10 through 2025-08-27.basil, via direct
+API replay). The PR session's demo ran against a different account
+where the omission happened to pass — an account-shaped assumption
+that had to be falsified on real hardware. With the mint failing,
+cardless and post-decline collection was entirely dead (settle AND
+the roster's "Get fresh link").
+**Chose:** success_url is a REQUIRED keyword arg of
+create_payment_link, built by the WEB layer from request.base_url
+(`{host}/paid`, a new static tokenless confirmation page) and
+threaded through settle_event / retry_dangling / _collect and the
+fresh-link route.
+**Alternatives:** (a) a BASE_URL env var — rejected: a deploy that
+forgets it still mints links, then dumps every payer on a
+localhost redirect after their money moved; a silent
+misconfiguration where threading has none. (b) Pinning a newer
+Stripe API version — tested, does not lift the requirement.
+**Why request.base_url:** it is the same origin share links
+already use, so the proxy-headers arrangement that makes /e/
+links right on a deploy makes the success page right too, with
+zero new config.
+**Also fixed — settle-report recovery labeling:** settle_event
+collapsed every per-attendee Stripe failure to a `dangling`
+outcome. But a cardless row commits `unpaid` BEFORE the mint, so a
+mint failure left an unpaid row wearing a "Retry charge" button
+that retry_dangling (correctly) refuses — "not a dangling charge",
+recovery dead-ended. Now: state `none` at failure = `dangling`
+(charge unconfirmed, same-key retry); past `none` = `unpaid`, and
+the report offers "Get fresh link" — same one-payable-link
+guarantees as the roster button.
+**Pinned by:** the exact-kwarg contract in tests/test_payments.py,
+test_checkout_success_url_from_request_host and
+test_link_mint_failure_lands_unpaid_with_fresh_link in
+tests/test_settle_web.py, test_paid_page_renders in
+tests/test_web.py.
+
+## 2026-07-16: Stripe id columns widened to 255 — no length contract
+**Found:** minutes after the success_url fix, the SAME smoke walk
+(real Postgres + real Stripe, first time both were real at once)
+broke the fresh-link commit: a real Checkout Session id
+(`cs_test_…`, 66 chars) overflowed stripe_checkout_session_id
+VARCHAR(64) — StringDataRightTruncationError. Worse than a 500:
+the session was already created at Stripe when the write died, so
+a LIVE tap-to-pay link existed that the DB didn't know — exactly
+the "DB knows less than Stripe" state the record-first rule
+exists to prevent. (The orphan was expired by hand.) The hermetic
+suite could never catch it: mocks use short ids ("cs_new") and
+SQLite ignores VARCHAR lengths — this is the Postgres-fidelity
+gap the 2026-07-16 settlement entry deferred, showing up early.
+**Chose:** every Stripe id column (planners.stripe_account_id,
+attendees.stripe_customer_id / stripe_payment_method_id,
+payments.stripe_payment_intent_id / stripe_checkout_session_id)
+is now String(255). Stripe publishes NO length guarantee for ids;
+255 follows their own integration guidance. Existing dev DBs:
+ALTER COLUMN ... TYPE VARCHAR(255) by hand or drop/recreate —
+create_all never ALTERs (demo.md reset).
+**Pinned by:** test_stripe_id_columns_hold_real_stripe_ids in
+tests/test_app.py — introspects DECLARED capacity, so it holds on
+SQLite too.

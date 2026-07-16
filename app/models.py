@@ -52,7 +52,7 @@ class Planner(Base):
     phone: Mapped[str] = mapped_column(String(32), unique=True)
     # Stripe Connect (Standard) account that receives funds and is
     # merchant of record (on_behalf_of)
-    stripe_account_id: Mapped[str] = mapped_column(String(64))
+    stripe_account_id: Mapped[str] = mapped_column(String(255))
     # The planner's own participation: a playing planner is an
     # ordinary Attendee + Rsvp row (decisions.md 2026-07-16). They
     # count in the split divisor when present but are NEVER charged
@@ -73,13 +73,13 @@ class Attendee(Base):
     # is saved at RSVP via a SetupIntent (charge-at-close, no hold —
     # decisions.md 2026-07-15); None until the attendee saves one.
     stripe_customer_id: Mapped[str | None] = mapped_column(
-        String(64)
+        String(255)
     )
     # The saved PaymentMethod charged off-session at close. None =
     # cardless (gets a tap-to-pay link instead). Reusable across this
     # attendee's events once saved.
     stripe_payment_method_id: Mapped[str | None] = mapped_column(
-        String(64)
+        String(255)
     )
 
 
@@ -189,14 +189,17 @@ class Payment(Base):
     # completed (decisions.md 2026-07-16). `state`, not this column,
     # says whether money was collected.
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(
-        String(64), unique=True
+        String(255), unique=True
     )
     # Cardless path: the Checkout Session behind the outstanding
     # tap-to-pay link. We poll its status on roster load to move
     # unpaid → paid — no webhook in v0 (decisions.md 2026-07-13,
     # 2026-07-15). None once paid by saved card, or never billed.
+    # 255 like every Stripe id here: Stripe publishes no length
+    # contract, and a real cs_test_ id overflowed 64 — the failed
+    # write orphaned a live link (decisions.md 2026-07-16).
     stripe_checkout_session_id: Mapped[str | None] = mapped_column(
-        String(64), unique=True
+        String(255), unique=True
     )
     # The actual share charged at close, integer cents. None until a
     # charge lands.

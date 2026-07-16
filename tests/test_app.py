@@ -84,3 +84,22 @@ def test_settings_normalizes_env_db_url(
     assert Settings().database_url.startswith(
         "postgresql+asyncpg://"
     )
+
+
+def test_stripe_id_columns_hold_real_stripe_ids() -> None:
+    """Stripe publishes no id-length contract, and a real
+    cs_test_ id overflowed VARCHAR(64) — the failed write orphaned
+    a live Checkout link (decisions.md 2026-07-16). SQLite ignores
+    VARCHAR lengths, so this pins the DECLARED capacity instead:
+    every Stripe id column must hold at least 255 chars."""
+    from app.models import Attendee, Payment, Planner
+
+    columns = [
+        Planner.__table__.c.stripe_account_id,
+        Attendee.__table__.c.stripe_customer_id,
+        Attendee.__table__.c.stripe_payment_method_id,
+        Payment.__table__.c.stripe_payment_intent_id,
+        Payment.__table__.c.stripe_checkout_session_id,
+    ]
+    for column in columns:
+        assert column.type.length >= 255, column.name

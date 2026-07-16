@@ -451,12 +451,18 @@ class TestCreatePaymentLink:
         create = AsyncMock(return_value=_checkout_session())
         mock_stripe.checkout.Session.create_async = create
 
-        url = await create_payment_link(payment, _planner(), 3200)
+        url = await create_payment_link(
+            payment,
+            _planner(),
+            3200,
+            success_url="https://app.example/paid",
+        )
 
         assert url == "https://checkout.stripe.com/c/pay/cs_new"
         assert payment.stripe_checkout_session_id == "cs_new"
         create.assert_awaited_once_with(
             mode="payment",
+            success_url="https://app.example/paid",
             line_items=[
                 {
                     "price_data": {
@@ -491,7 +497,12 @@ class TestCreatePaymentLink:
         mock_stripe.checkout.Session.create_async = AsyncMock()
 
         with pytest.raises(ValueError):
-            await create_payment_link(payment, _planner(), 3200)
+            await create_payment_link(
+                payment,
+                _planner(),
+                3200,
+                success_url="https://app.example/paid",
+            )
         mock_stripe.checkout.Session.create_async.assert_not_awaited()
 
     async def test_reissue_expires_the_old_open_session(
@@ -513,7 +524,12 @@ class TestCreatePaymentLink:
             return_value=_checkout_session()
         )
 
-        url = await create_payment_link(payment, _planner(), 3200)
+        url = await create_payment_link(
+            payment,
+            _planner(),
+            3200,
+            success_url="https://app.example/paid",
+        )
 
         retrieve = mock_stripe.checkout.Session.retrieve_async
         retrieve.assert_awaited_once_with("cs_old")
@@ -542,7 +558,12 @@ class TestCreatePaymentLink:
         mock_stripe.checkout.Session.create_async = AsyncMock()
 
         with pytest.raises(ValueError):
-            await create_payment_link(payment, _planner(), 3200)
+            await create_payment_link(
+                payment,
+                _planner(),
+                3200,
+                success_url="https://app.example/paid",
+            )
         mock_stripe.checkout.Session.expire_async.assert_not_awaited()
         mock_stripe.checkout.Session.create_async.assert_not_awaited()
         assert payment.stripe_checkout_session_id == "cs_old"
@@ -567,7 +588,12 @@ class TestCreatePaymentLink:
             return_value=_checkout_session()
         )
 
-        await create_payment_link(payment, _planner(), 3200)
+        await create_payment_link(
+                payment,
+                _planner(),
+                3200,
+                success_url="https://app.example/paid",
+            )
 
         mock_stripe.checkout.Session.expire_async.assert_not_awaited()
         assert payment.stripe_checkout_session_id == "cs_new"
@@ -579,7 +605,12 @@ class TestCreatePaymentLink:
         mock_stripe.checkout.Session.create_async = AsyncMock()
 
         with pytest.raises(ValueError):
-            await create_payment_link(payment, _planner(), 0)
+            await create_payment_link(
+                payment,
+                _planner(),
+                0,
+                success_url="https://app.example/paid",
+            )
         mock_stripe.checkout.Session.create_async.assert_not_awaited()
 
 

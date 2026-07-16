@@ -308,3 +308,62 @@ async def test_settle_zero_participants_charges_nobody(
     )
     assert payments == []
     mock_stripe.PaymentIntent.create_async.assert_not_called()
+
+
+async def test_checkout_success_url_from_request_host(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    mock_stripe: MagicMock,
+) -> None:
+    """Stripe refuses a hosted session without success_url
+    (decisions.md 2026-07-16); it must carry the REQUEST host —
+    the same origin share links use — never a hardcoded one."""
+    event, _ = await _event(db_session)
+    await _going(db_session, event, "Tia", "+15550000003")
+    mock_stripe.checkout.Session.create_async = AsyncMock(
+        return_value=SimpleNamespace(
+            id="cs_tia",
+            url="https://checkout.stripe.test/pay/cs_tia",
+        )
+    )
+    resp = await client.post(
+        f"/admin/{event.admin_token}/settle",
+        data={"mode": "actual"},
+    )
+    assert resp.status_code == 200
+    kwargs = (
+        mock_stripe.checkout.Session.create_async.await_args.kwargs
+    )
+    assert kwargs["success_url"] == "http://test/paid"
+
+
+async def test_link_mint_failure_lands_unpaid_with_fresh_link(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    mock_stripe: MagicMock,
+) -> None:
+    """A cardless attendee's share resolves to `unpaid` BEFORE the
+    link is minted; a mint failure must surface as unpaid with a
+    fresh-link button — never as `dangling`, whose retry route
+    refuses rows past `none`."""
+    event, _ = await _event(db_session)
+    await _going(db_session, event, "Tia", "+15550000003")
+    mock_stripe.checkout.Session.create_async = AsyncMock(
+        side_effect=real_stripe.StripeError("api down")
+    )
+    resp = await client.post(
+        f"/admin/{event.admin_token}/settle",
+        data={"mode": "actual"},
+    )
+    assert resp.status_code == 200
+    assert "unpaid" in resp.text
+    assert "Get fresh link" in resp.text
+    assert "dangling" not in resp.text
+    assert "Retry charge" not in resp.text
+    payment = (
+        await db_session.execute(
+            select(Payment).where(Payment.event_id == event.id)
+        )
+    ).scalar_one()
+    assert payment.state == "unpaid"
+    assert payment.stripe_checkout_session_id is None

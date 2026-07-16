@@ -310,3 +310,11 @@ async def test_roster_poll_error_is_contained(
     assert "status unknown" in page.text
     await db_session.refresh(payment)
     assert payment.state == "unpaid"  # unchanged, retried next load
+
+
+async def test_paid_page_renders(client: AsyncClient) -> None:
+    """Checkout's success_url target: static, tokenless, safe to
+    land on from any payment."""
+    resp = await client.get("/paid")
+    assert resp.status_code == 200
+    assert "Payment received" in resp.text
