@@ -1,0 +1,220 @@
+/* KnowaPlan teaching workspace — shared lesson stylesheet.
+   Tufte-inspired: serif body, generous measure, margin notes.
+   No web fonts, no external requests: these open from file:// and
+   must render offline and print clean. */
+
+:root {
+  --bg: #fffff8;
+  --fg: #111;
+  --muted: #6b6b60;
+  --rule: #d8d8c8;
+  --accent: #8b2500;      /* burnt orange — money/danger */
+  --ok: #1f5c2f;
+  --code-bg: #f4f4e8;
+  --measure: 38rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16160f;
+    --fg: #e8e8dd;
+    --muted: #9a9a8c;
+    --rule: #3a3a30;
+    --accent: #ff9166;
+    --ok: #7fc98f;
+    --code-bg: #22221a;
+  }
+}
+
+html { font-size: 17px; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: Palatino, "Palatino Linotype", "Book Antiqua",
+               Georgia, serif;
+  line-height: 1.65;
+  margin: 0 auto;
+  padding: 4rem 2rem 8rem;
+  max-width: 66rem;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- measure: body copy stays narrow even on a wide page ---- */
+p, ul, ol, blockquote, .callout, .card, h2, h3, h4,
+.quiz, .sourcebox, .footer {
+  max-width: var(--measure);
+}
+
+h1 {
+  font-weight: 400;
+  font-size: 2.1rem;
+  line-height: 1.2;
+  margin: 0 0 .3rem;
+  max-width: var(--measure);
+}
+
+.subtitle {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0 0 2.5rem;
+  max-width: var(--measure);
+}
+
+h2 {
+  font-weight: 400;
+  font-size: 1.5rem;
+  margin: 3rem 0 .8rem;
+}
+
+h3 {
+  font-weight: 400;
+  font-style: italic;
+  font-size: 1.2rem;
+  margin: 2rem 0 .5rem;
+}
+
+a { color: inherit; text-decoration-color: var(--muted); }
+a:hover { text-decoration-color: var(--accent); }
+
+code, .mono {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: .82em;
+  background: var(--code-bg);
+  padding: .1em .3em;
+  border-radius: 2px;
+}
+pre {
+  background: var(--code-bg);
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  border-left: 2px solid var(--rule);
+  max-width: var(--measure);
+}
+pre code { background: none; padding: 0; }
+
+/* ---- margin note (Tufte sidenote, simplified) ---- */
+.note {
+  float: right;
+  clear: right;
+  width: 15rem;
+  margin: 0 0 1rem 2rem;
+  font-size: .8rem;
+  line-height: 1.45;
+  color: var(--muted);
+  font-style: italic;
+}
+@media (max-width: 1100px) {
+  .note {
+    float: none;
+    width: auto;
+    max-width: var(--measure);
+    margin: 1rem 0;
+    padding-left: 1rem;
+    border-left: 2px solid var(--rule);
+  }
+}
+
+/* ---- callouts ---- */
+.callout {
+  border-left: 3px solid var(--accent);
+  padding: .2rem 0 .2rem 1.2rem;
+  margin: 1.8rem 0;
+}
+.callout .label {
+  display: block;
+  font-variant: small-caps;
+  letter-spacing: .07em;
+  font-size: .78rem;
+  color: var(--accent);
+  font-style: normal;
+}
+
+/* ---- DB row rendering: the thing they'll actually stare at ---- */
+table.row {
+  border-collapse: collapse;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: .74rem;
+  margin: 1.2rem 0;
+  width: 100%;
+  max-width: var(--measure);
+}
+table.row th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+  padding: .28rem .8rem .28rem 0;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 12.5rem;
+}
+table.row td {
+  padding: .28rem 0;
+  vertical-align: top;
+  word-break: break-all;
+}
+table.row tr + tr th, table.row tr + tr td {
+  border-top: 1px solid var(--rule);
+}
+.null { color: var(--muted); font-style: italic; }
+.hot { color: var(--accent); font-weight: 700; }
+
+/* ---- reference-sheet grid ---- */
+table.ref {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: .82rem;
+  margin: 1rem 0 2rem;
+}
+table.ref th, table.ref td {
+  text-align: left;
+  vertical-align: top;
+  padding: .55rem .7rem;
+  border-bottom: 1px solid var(--rule);
+}
+table.ref thead th {
+  font-variant: small-caps;
+  letter-spacing: .06em;
+  color: var(--muted);
+  font-weight: 400;
+  border-bottom: 2px solid var(--rule);
+}
+table.ref code { font-size: .78em; }
+
+/* ---- primary source box ---- */
+.sourcebox {
+  border: 1px solid var(--rule);
+  padding: 1rem 1.2rem;
+  margin: 2.5rem 0;
+  background: var(--code-bg);
+}
+.sourcebox .label {
+  font-variant: small-caps;
+  letter-spacing: .07em;
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.footer {
+  margin-top: 4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule);
+  font-size: .85rem;
+  color: var(--muted);
+}
+.footer a { text-decoration: none; border-bottom: 1px solid var(--rule); }
+
+/* ---- print: this is a pocket reference at a pickleball court ---- */
+@media print {
+  :root {
+    --bg: #fff; --fg: #000; --muted: #555;
+    --rule: #bbb; --code-bg: #f2f2f2; --accent: #000;
+  }
+  html { font-size: 10.5pt; }
+  body { padding: 0; max-width: none; }
+  .noprint, .quiz-score { display: none !important; }
+  table.ref { page-break-inside: avoid; }
+  .callout { page-break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: .75em; color: #555; }
+  a[href^="#"]::after, .footer a::after { content: ""; }
+}

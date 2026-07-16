@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 1 — Read the Payment row</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Read the Payment row</h1>
+<p class="subtitle">Lesson 1 · ~10 minutes · The one skill you cannot
+be without on July 29th</p>
+
+<p>It's 8pm on the 29th. The game is over, everyone's packing up paddles,
+and you've just settled the event on your phone. Marcus walks over:
+<em>“Hey — did that go through? My bank texted me something weird.”</em></p>
+
+<p>You have about ten seconds before this becomes awkward. You open the
+roster. One row tells you everything — <strong>if</strong> you can read
+it. That's this lesson. Not the whole money path; just the ability to
+look at one Payment row and say what happened to one person's money.</p>
+
+<h2>The shape of the thing</h2>
+
+<p>A Payment row has two kinds of column, and confusing them is how
+people lose money.</p>
+
+<p class="note">You designed this. <a href="../decisions.md">decisions.md</a>
+2026-07-13, “Record-first money movement.” The lesson here is what it
+actually <em>looks like</em> in a row at 8pm.</p>
+
+<p><strong>What we tried</strong> — <code>charge_requested_at</code> and
+<code>charge_requested_cents</code>. Written <em>before</em> we call
+Stripe.</p>
+
+<p><strong>What we know</strong> — <code>state</code> and
+<code>charged_cents</code>. Written <em>after</em> Stripe answers.</p>
+
+<p>That ordering is the entire design. Write down what you're about to do,
+<em>then</em> do it. Because there's a gap between those two writes, and
+your process can die in that gap — a crash, a timeout, a dropped wifi
+connection at a pickleball court.</p>
+
+<div class="callout">
+  <span class="label">The insight</span>
+  If the two halves disagree — we <em>tried</em> but we don't
+  <em>know</em> — that's not a bug. That's the design working. It's called
+  a <strong>dangling charge</strong>, and it is the one situation where
+  you genuinely do not know whether money moved.
+</div>
+
+<h2>The five states</h2>
+
+<p>You wrote these. Quick refresher, because the quiz needs them loaded
+in memory:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><code>none</code></td><td>No charge yet. Also where no-shows
+  stay forever.</td></tr>
+<tr><td><code>paid</code></td><td>Money collected. The good one.</td></tr>
+<tr><td><code>unpaid</code></td><td>Close happened, we didn't collect —
+  no card, or the card said no. <strong>Normal, not broken.</strong></td></tr>
+<tr><td><code>abandoned</code></td><td>You stopped chasing.</td></tr>
+<tr><td><code>refunded</code></td><td>A collected charge, reversed.
+  (Not shipped yet.)</td></tr>
+</tbody>
+</table>
+
+<h2>Two words you need first</h2>
+
+<p><strong>PaymentIntent</strong> (Stripe's word, abbreviated
+<code>pi_…</code>): Stripe's record of <em>one attempt</em> to move money.
+Not a receipt. An attempt. It exists whether the attempt succeeded or the
+card was declined — the attempt happened either way, and Stripe wrote it
+down either way. <span class="hot">This is the single most
+misread thing in the schema.</span></p>
+
+<p><strong>Off-session</strong>: charging a card when the human isn't
+sitting there. At close, Marcus is holding a paddle, not his phone — so
+his saved card gets charged off-session. Issuers are twitchier about
+off-session charges, which is exactly why they decline more often, and
+why the tap-to-pay link (where he <em>is</em> present) usually clears
+them.</p>
+
+<h2>Now read some rows</h2>
+
+<p>Five real shapes. Pick a verdict; you get one shot each. Wrong answers
+are where the learning is, so don't hedge — commit, then read why.</p>
+
+<section class="quiz" data-quiz>
+
+<!-- Q1 pristine -->
+<div class="quiz-q" data-answer="pristine">
+  <div class="quiz-stem"><span class="n">Row 1</span>Marcus RSVP'd and
+  saved a card. You haven't settled the event yet.</div>
+  <table class="row">
+    <tr><th>state</th><td>none</td></tr>
+    <tr><th>charge_requested_at</th><td class="null">NULL</td></tr>
+    <tr><th>charge_requested_cents</th><td class="null">NULL</td></tr>
+    <tr><th>charged_cents</th><td class="null">NULL</td></tr>
+    <tr><th>stripe_payment_intent_id</th><td class="null">NULL</td></tr>
+    <tr><th>state_reason</th><td class="null">NULL</td></tr>
+  </table>
+  <div class="quiz-choices">
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="link">Link awaiting payment</button>
+  </div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">Right</span>
+    — pristine. <code>state=none</code> with no stamp means we never even
+    got as far as intending to charge. Nothing to do.</div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">No</span>
+    — <code>charged_cents</code> is <code>NULL</code> and state isn't
+    <code>paid</code>. Nothing collected.</div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">No</span>
+    — close, and this is the right instinct to have. But dangling needs the
+    <em>stamp set</em>. No stamp means we never called Stripe.</div>
+  <div class="quiz-fb" data-key="link"><span class="verdict">No</span>
+    — no link exists; <code>stripe_checkout_session_id</code> would be set
+    and state would be <code>unpaid</code>.</div>
+</div>
+
+<!-- Q2 dangling -->
+<div class="quiz-q" data-answer="dangling">
+  <div class="quiz-stem"><span class="n">Row 2</span>You hit Settle. The
+  page hung and you lost signal. This is Marcus's row now.</div>
+  <table class="row">
+    <tr><th>state</th><td>none</td></tr>
+    <tr><th>charge_requested_at</th><td class="hot">2026-07-29 20:04:11+00</td></tr>
+    <tr><th>charge_requested_cents</th><td class="hot">3000</td></tr>
+    <tr><th>charged_cents</th><td class="null">NULL</td></tr>
+    <tr><th>stripe_payment_intent_id</th><td class="null">NULL</td></tr>
+    <tr><th>state_reason</th><td class="null">NULL</td></tr>
+  </table>
+  <div class="quiz-choices">
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="link">Link awaiting payment</button>
+  </div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">Right</span>
+    — and this is <em>the</em> row to recognise. The stamp says we were about
+    to charge $30. The state says Stripe never answered. Marcus may have been
+    charged. He may not. <strong>You cannot tell from here, and that's fine
+    — press “Retry charge”.</strong> It re-sends the identical request with
+    the same <em>idempotency key</em> (a string Stripe remembers for ~24h so
+    a repeat can't double-charge — it just replays what really happened).
+    That's why it re-sends the <em>stamped</em> $30 and never a recomputed
+    number: a different amount is a different request, and Stripe would run
+    it for real.</div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">No</span>
+    — and this is the expensive mistake. The stamp is set. We told Stripe to
+    take $30 and never heard back. Treating this as “nothing happened” is how
+    you double-charge Marcus.</div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">No</span>
+    — maybe! That's the point. It <em>might</em> have collected. But the DB
+    doesn't know, so you don't get to assume. Retry and let Stripe tell you.</div>
+  <div class="quiz-fb" data-key="link"><span class="verdict">No</span>
+    — no link is minted until a row reaches <code>unpaid</code>.</div>
+</div>
+
+<!-- Q3 paid -->
+<div class="quiz-q" data-answer="collected">
+  <div class="quiz-stem"><span class="n">Row 3</span>Settle went through
+  cleanly.</div>
+  <table class="row">
+    <tr><th>state</th><td>paid</td></tr>
+    <tr><th>charge_requested_at</th><td>2026-07-29 20:04:11+00</td></tr>
+    <tr><th>charge_requested_cents</th><td>3000</td></tr>
+    <tr><th>charged_cents</th><td class="hot">3000</td></tr>
+    <tr><th>stripe_payment_intent_id</th><td>pi_3PqR9s2eZvKYlo2C1aBcDeFg</td></tr>
+    <tr><th>state_reason</th><td class="null">NULL</td></tr>
+  </table>
+  <div class="quiz-choices">
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="link">Link awaiting payment</button>
+  </div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">Right</span>
+    — <code>state=paid</code> and <code>charged_cents=3000</code>. $30 is in
+    your Connect account, minus Stripe's cut. Note both halves agree: we
+    intended 3000, we collected 3000. Tell Marcus yes.</div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">No</span>
+    — <code>state=paid</code>. Money moved.</div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">No</span>
+    — the stamp is set, but so is the state. Dangling requires
+    <code>state=none</code>: tried, but never resolved. This one resolved.</div>
+  <div class="quiz-fb" data-key="link"><span class="verdict">No</span>
+    — already paid by saved card; no link involved.</div>
+</div>
+
+<!-- Q4 unpaid no_card -->
+<div class="quiz-q" data-answer="link">
+  <div class="quiz-stem"><span class="n">Row 4</span>Priya came, played,
+  and never added a card at RSVP.</div>
+  <table class="row">
+    <tr><th>state</th><td>unpaid</td></tr>
+    <tr><th>charge_requested_at</th><td>2026-07-29 20:04:11+00</td></tr>
+    <tr><th>charge_requested_cents</th><td>3000</td></tr>
+    <tr><th>charged_cents</th><td class="null">NULL</td></tr>
+    <tr><th>stripe_payment_intent_id</th><td class="null">NULL</td></tr>
+    <tr><th>stripe_checkout_session_id</th><td>cs_test_a1B2c3D4e5F6g7H8i9J0</td></tr>
+    <tr><th>state_reason</th><td>no_card</td></tr>
+  </table>
+  <div class="quiz-choices">
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="link">Link awaiting payment</button>
+  </div>
+  <div class="quiz-fb" data-key="link"><span class="verdict">Right</span>
+    — and notice this is <em>not a failure</em>. Priya chose cardless; the
+    system did exactly what it promised. A session id is set, so her
+    tap-to-pay link is live. Text it to her. If it's gone stale (they last
+    about a day), press “Get fresh link” — never dig up the old URL.</div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">No</span>
+    — the row reached <code>unpaid</code>, which only happens at close.</div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">No</span>
+    — <code>unpaid</code> means we didn't collect. <code>charged_cents</code>
+    is <code>NULL</code>.</div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">No</span>
+    — dangling is <code>state=none</code>. This row resolved: no card, so no
+    charge was ever attempted. The stamp is set because we committed the
+    intent before finding out she had no card.</div>
+</div>
+
+<!-- Q5 the trap -->
+<div class="quiz-q" data-answer="link">
+  <div class="quiz-stem"><span class="n">Row 5</span>Dave saved a card at
+  RSVP. Read carefully — this is the one that catches people.</div>
+  <table class="row">
+    <tr><th>state</th><td>unpaid</td></tr>
+    <tr><th>charge_requested_at</th><td>2026-07-29 20:04:11+00</td></tr>
+    <tr><th>charge_requested_cents</th><td>3000</td></tr>
+    <tr><th>charged_cents</th><td class="null">NULL</td></tr>
+    <tr><th>stripe_payment_intent_id</th><td class="hot">pi_3PqRAt2eZvKYlo2C9zYxWvUt</td></tr>
+    <tr><th>stripe_checkout_session_id</th><td>cs_test_k1L2m3N4o5P6q7R8s9T0</td></tr>
+    <tr><th>state_reason</th><td class="hot">insufficient_funds</td></tr>
+  </table>
+  <div class="quiz-choices">
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="link">Link awaiting payment</button>
+  </div>
+  <div class="quiz-fb" data-key="link"><span class="verdict">Right —
+    and you didn't fall for it</span>
+    — there's a <code>pi_…</code> id sitting right there, and it means
+    <em>nothing</em> about whether money moved. Dave's card was charged
+    off-session, his bank said no (<code>insufficient_funds</code>), and we
+    recorded the failed attempt's PaymentIntent because the DB must know
+    everything Stripe knows. His link is live: text it. And note — we will
+    <strong>never</strong> re-fire his saved card for this row. The link is
+    the only recovery, and since he'll be present when he taps it, it usually
+    works where the off-session charge didn't.</div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">No — and
+    this is the trap</span>
+    — you saw <code>pi_…</code> and read it as a receipt. It isn't. A
+    PaymentIntent is Stripe's record of an <em>attempt</em>, and this attempt
+    was declined — <code>state_reason</code> says
+    <code>insufficient_funds</code> and <code>charged_cents</code> is
+    <code>NULL</code>. <strong>Only <code>state</code> says whether money
+    moved.</strong> Burn that in: it's the difference between telling Dave
+    he's square and him owing you $30.</div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">No</span>
+    — dangling means we don't know. Here we know exactly: the bank declined
+    and told us why. <code>state=unpaid</code> is a resolved outcome.</div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">No</span>
+    — a charge was attempted and declined.</div>
+</div>
+
+</section>
+
+<h2>What you can now do</h2>
+
+<p>Look at any row and answer Marcus in ten seconds. More importantly:
+you now know the one row shape that means <em>stop and press Retry</em>
+rather than guess — and the one column that lies.</p>
+
+<p>Take the field guide with you:
+<a href="../reference/payment-row.html"><strong>Payment row — field
+guide</strong></a>. Print it. It's the whole diagnosis table on one page.</p>
+
+<div class="sourcebox">
+  <span class="label">Read next — primary source</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="https://docs.stripe.com/payments/paymentintents/lifecycle"><strong>How
+  Payment Intents and Setup Intents work</strong></a> — Stripe</p>
+  <p style="margin:0;font-size:.87rem">Ten minutes. It's the source of the
+  vocabulary this lesson borrowed, and it says the thing Row 5 turns on:
+  <em>“If the payment attempt fails (for example, due to a decline), the
+  PaymentIntent's status returns to <code>requires_payment_method</code> so
+  that the payment can be retried.”</em> The attempt object survives the
+  failure. That's why a <code>pi_…</code> id proves nothing.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  I'm your teacher here, not just a lesson generator. If any of this is
+  fuzzy — what a “commit” actually is, why the stamp and the state can't
+  be written together, what Stripe's cut actually comes to — ask. Vague
+  questions are fine (“I don't get row 2”). That's what the next lesson
+  gets built from.
+</div>
+
+<div class="footer">
+  <p><strong>Next up</strong> — Lesson 2 will most likely be
+  <em>“Why the stamp and the state can't be one write”</em>: what a database
+  transaction is, and why record-first is the only honest way to touch money
+  when Stripe lives outside your database. Row 2 is the whole reason it
+  exists.</p>
+  <p><a href="../MISSION.md">Mission</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../RESOURCES.md">Resources</a> ·
+     <a href="../decisions.md">decisions.md</a> ·
+     <a href="../state_machines.md">state_machines.md</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
