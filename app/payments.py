@@ -227,7 +227,11 @@ async def charge_share(
 
 
 async def create_payment_link(
-    payment: Payment, planner: Planner, actual_cents: int
+    payment: Payment,
+    planner: Planner,
+    actual_cents: int,
+    *,
+    success_url: str,
 ) -> str:
     """Cardless / post-decline: open a one-time Checkout Session for
     the share (mode='payment', Connect wiring under
@@ -237,8 +241,11 @@ async def create_payment_link(
     refused if it collected (poll must reconcile), expired if still
     open. Store session.id on payment.stripe_checkout_session_id so
     poll_link_status can read it. Do NOT pin a fixed idempotency key
-    — a session expires and a reused key replays the dead one. No
-    success_url: Stripe's hosted confirmation page suffices in v0."""
+    — a session expires and a reused key replays the dead one.
+    success_url is REQUIRED — Stripe rejects a hosted payment-mode
+    session without one (verified against a real account,
+    decisions.md 2026-07-16); the caller builds it from the request
+    host, the same way share links get their domain."""
     _validate_cents(actual_cents)
     if payment.state != "unpaid":
         raise ValueError(
@@ -260,6 +267,7 @@ async def create_payment_link(
             await stripe.checkout.Session.expire_async(old_id)
     session = await stripe.checkout.Session.create_async(
         mode="payment",
+        success_url=success_url,
         line_items=[
             {
                 "price_data": {

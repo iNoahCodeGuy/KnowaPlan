@@ -35,6 +35,14 @@ report.shortfall_cents %} ·
               action="/admin/{{ event.admin_token }}/retry/{{ payment.id }}">
           <button>Retry charge</button>
         </form>
+      {% elif o.result == "unpaid" and payment %}
+        {# unpaid with no link: the share resolved but no live link
+           exists (mint failed, or a prior run's link is being
+           re-shown) — recovery is a fresh link, never a retry. #}
+        <form method="post"
+              action="/admin/{{ event.admin_token }}/link/{{ payment.id }}">
+          <button>Get fresh link</button>
+        </form>
       {% endif %}
     </td>
   </tr>

@@ -230,7 +230,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert report.share_cents == 3000
         assert report.charge_cents == 3000
@@ -265,7 +270,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert report.share_cents == 3333
         payments = await _payments(db_session)
@@ -294,7 +304,12 @@ class TestSettleEvent:
             )
         )
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         by_result = {o.result: o for o in report.outcomes}
         assert set(by_result) == {"paid", "unpaid"}
@@ -327,7 +342,11 @@ class TestSettleEvent:
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
         report = await settle_event(
-            db_session, event, planner, cap_at_estimate=True
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+            cap_at_estimate=True,
         )
 
         assert report.share_cents == 6000
@@ -349,7 +368,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert report.charge_cents == 6000
         assert report.shortfall_cents == 0
@@ -375,7 +399,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         await db_session.refresh(rsvp)
         assert rsvp.state == "attended"
@@ -404,7 +433,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         await db_session.refresh(rsvp)
         assert rsvp.state == "no_show"
@@ -426,7 +460,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        await settle_event(db_session, event, planner)
+        await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         await db_session.refresh(event)
         assert event.state == "settled"
@@ -445,7 +484,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert report.share_cents == 0
         assert report.outcomes == ()
@@ -473,7 +517,12 @@ class TestSettleEvent:
             side_effect=_observe
         )
 
-        await settle_event(db_session, event, planner)
+        await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert seen["in_txn"] is False
 
@@ -492,7 +541,12 @@ class TestSettleEvent:
         planner = await db_session.get(Planner, event.planner_id)
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert report.charge_cents == 3500
         calls = (
@@ -556,7 +610,12 @@ class TestSettleFailures:
             )
         )
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         by_result = {o.result: o for o in report.outcomes}
         assert set(by_result) == {"paid", "unpaid"}
@@ -586,7 +645,12 @@ class TestSettleFailures:
             {"cus_1": mock_stripe.StripeError("api blip")},
         )
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         results = sorted(o.result for o in report.outcomes)
         assert results == ["dangling", "paid"]
@@ -641,7 +705,12 @@ class TestSettleFailures:
         await db_session.commit()
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert sorted(o.result for o in report.outcomes) == [
             "paid",
@@ -683,7 +752,12 @@ class TestSettleFailures:
         mock_stripe.checkout.Session.create_async = AsyncMock()
         mock_stripe.checkout.Session.expire_async = AsyncMock()
 
-        report = await settle_event(db_session, event, planner)
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
 
         assert [o.result for o in report.outcomes] == ["unpaid"]
         assert report.outcomes[0].link_url is None
@@ -704,7 +778,12 @@ class TestSettleFailures:
         planner = await db_session.get(Planner, event.planner_id)
 
         with pytest.raises(ValueError):
-            await settle_event(db_session, event, planner)
+            await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
         assert event.state == state
 
 
@@ -752,7 +831,11 @@ class TestRetryDangling:
         mock_stripe.PaymentIntent.create_async = _succeeding_pi()
 
         outcome = await retry_dangling(
-            db_session, payment, attendee, planner
+            db_session,
+            payment,
+            attendee,
+            planner,
+            success_url="https://app.example/paid",
         )
 
         assert outcome.result == "paid"
@@ -776,7 +859,11 @@ class TestRetryDangling:
 
         with pytest.raises(ValueError):
             await retry_dangling(
-                db_session, payment, attendee, planner
+                db_session,
+                payment,
+                attendee,
+                planner,
+                success_url="https://app.example/paid",
             )
         mock_stripe.PaymentIntent.create_async.assert_not_awaited()
 
@@ -796,7 +883,11 @@ class TestRetryDangling:
         )
 
         outcome = await retry_dangling(
-            db_session, payment, attendee, planner
+            db_session,
+            payment,
+            attendee,
+            planner,
+            success_url="https://app.example/paid",
         )
 
         assert outcome.result == "unpaid"

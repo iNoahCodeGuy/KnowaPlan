@@ -141,6 +141,23 @@ PLANNER_ACCOUNT_ID to the LIVE connected account, restart the
 service — no code change. Refunds during the live test are made
 from the Stripe DASHBOARD (in-app refunds ship with walk-ins).
 
+Before the first live charge, verify two things:
+
+1. **The live connected account can take charges.** The live
+   PLANNER_ACCOUNT_ID is a DIFFERENT id from the test-mode one,
+   and it must be a CONNECTED Standard account (Stripe refuses a
+   destination of self). Check it the skeleton_01_auth.py way —
+   retrieve the account with the live secret key and confirm
+   `charges_enabled` is true — or in the Dashboard: Connect →
+   Accounts → the account shows "Charges enabled".
+2. **The statement descriptor reads recognizably.** Every charge
+   shows the connected account's descriptor on card statements
+   (the app sets none). Dashboard → Settings → Business →
+   Public details. During the $1 test, check what the charge
+   actually says on a real statement/card app — an
+   unrecognizable descriptor is how "what is this charge?"
+   texts and disputes happen.
+
 ## If it refuses loudly
 
 | Symptom | Fix |

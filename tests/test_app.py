@@ -84,3 +84,75 @@ def test_settings_normalizes_env_db_url(
     assert Settings().database_url.startswith(
         "postgresql+asyncpg://"
     )
+
+
+async def test_engine_pings_pooled_connections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Managed Postgres reaps idle connections; pool_pre_ping is
+    what keeps the first request after a quiet stretch from
+    landing on a dead one. Pins the flag on the engine our app
+    actually builds. DATABASE_URL is pinned here because the
+    outcome must not depend on the developer's .env (a sync-driver
+    URL there would fail engine construction, not the assertion);
+    save/restore the lazy singleton so the probe engine never
+    leaks into other tests."""
+    from app import db
+
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite://")
+    saved = (db._engine, db._sessionmaker)
+    db._engine = db._sessionmaker = None
+    try:
+        engine = db.get_engine()
+        assert engine.sync_engine.pool._pre_ping is True
+        await engine.dispose()
+    finally:
+        db._engine, db._sessionmaker = saved
+
+
+def test_unhandled_error_renders_branded_page() -> None:
+    """An uncaught exception must show the friendly error page,
+    not a bare 'Internal Server Error' — and must never leak the
+    exception text to the person tapping the link."""
+    route_path = "/_test_boom"
+
+    @app.get(route_path)
+    async def _boom() -> None:
+        raise RuntimeError("secret-internals")
+
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(route_path)
+        assert resp.status_code == 500
+        assert "text the planner" in resp.text
+        # A crash must not wear the refusal heading: "Can't do
+        # that" implies nothing happened, and a mid-settle crash
+        # can land after a charge.
+        assert "Something went wrong" in resp.text
+        assert "Can't do that" not in resp.text
+        assert "secret-internals" not in resp.text
+    finally:
+        app.router.routes[:] = [
+            r
+            for r in app.router.routes
+            if getattr(r, "path", None) != route_path
+        ]
+
+
+def test_stripe_id_columns_hold_real_stripe_ids() -> None:
+    """Stripe publishes no id-length contract, and a real
+    cs_test_ id overflowed VARCHAR(64) — the failed write orphaned
+    a live Checkout link (decisions.md 2026-07-16). SQLite ignores
+    VARCHAR lengths, so this pins the DECLARED capacity instead:
+    every Stripe id column must hold at least 255 chars."""
+    from app.models import Attendee, Payment, Planner
+
+    columns = [
+        Planner.__table__.c.stripe_account_id,
+        Attendee.__table__.c.stripe_customer_id,
+        Attendee.__table__.c.stripe_payment_method_id,
+        Payment.__table__.c.stripe_payment_intent_id,
+        Payment.__table__.c.stripe_checkout_session_id,
+    ]
+    for column in columns:
+        assert column.type.length >= 255, column.name

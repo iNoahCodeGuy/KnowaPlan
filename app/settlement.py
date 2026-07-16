@@ -107,6 +107,7 @@ async def _collect(
     attendee: Attendee,
     planner: Planner,
     cents: int,
+    success_url: str,
 ) -> Outcome:
     """Collect one stamped row: saved card first, link fallback.
     A decline is an outcome (unpaid + link minted right away — the
@@ -124,7 +125,9 @@ async def _collect(
         )
         payment.state_reason = "no_card"
         await session.commit()
-    url = await create_payment_link(payment, planner, cents)
+    url = await create_payment_link(
+        payment, planner, cents, success_url=success_url
+    )
     await session.commit()
     return Outcome(attendee.id, "unpaid", link_url=url)
 
@@ -134,6 +137,8 @@ async def retry_dangling(
     payment: Payment,
     attendee: Attendee,
     planner: Planner,
+    *,
+    success_url: str,
 ) -> Outcome:
     """Retry a dangling charge with the STAMPED amount — identical
     params by construction, so Stripe replays the original outcome
@@ -151,6 +156,7 @@ async def retry_dangling(
         attendee,
         planner,
         payment.charge_requested_cents,
+        success_url,
     )
 
 
@@ -159,6 +165,7 @@ async def settle_event(
     event: Event,
     planner: Planner,
     *,
+    success_url: str,
     cap_at_estimate: bool = False,
 ) -> SettlementReport:
     """Close -> split -> charge/link -> settled (decisions.md
@@ -269,14 +276,25 @@ async def settle_event(
         try:
             outcomes.append(
                 await _collect(
-                    session, payment, attendee, planner, cents
+                    session,
+                    payment,
+                    attendee,
+                    planner,
+                    cents,
+                    success_url,
                 )
             )
         except (stripe.StripeError, RuntimeError):
-            # An API failure is contained per attendee: the row
-            # stays dangling (queryable, same-key retry) and the
-            # rest of the group still settles.
-            outcomes.append(Outcome(attendee.id, "dangling"))
+            # An API failure is contained per attendee and the rest
+            # of the group still settles. state `none` = the charge
+            # itself is unconfirmed: dangling, same-key retry. Past
+            # `none` = the charge resolved (unpaid committed) and
+            # only the LINK mint failed: recovery is a fresh link,
+            # never retry_dangling (which refuses non-none rows).
+            result = (
+                "dangling" if payment.state == "none" else "unpaid"
+            )
+            outcomes.append(Outcome(attendee.id, result))
 
     # A playing planner's own undecided attendance still resolves —
     # they participate, they just aren't charged.

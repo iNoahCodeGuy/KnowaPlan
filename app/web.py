@@ -117,6 +117,14 @@ def _cannot(request: Request, message: str) -> Response:
     )
 
 
+def _success_url(request: Request) -> str:
+    # Stripe requires an absolute success_url on every Checkout
+    # Session (decisions.md 2026-07-16). Built from the request host
+    # — the same source share links use — so the proxy headers that
+    # make /e/ links right on a deploy make this right too.
+    return str(request.base_url).rstrip("/") + "/paid"
+
+
 async def _event_by_admin_token(
     session: AsyncSession, token: str
 ) -> Event | None:
@@ -741,7 +749,11 @@ async def retry_route(
         return _not_found(request)
     try:
         outcome = await retry_dangling(
-            session, payment, attendee, planner
+            session,
+            payment,
+            attendee,
+            planner,
+            success_url=_success_url(request),
         )
     except ValueError as err:
         return _cannot(request, str(err))
@@ -793,7 +805,10 @@ async def fresh_link_route(
         # Always the STAMPED amount — a re-mint is the same debt,
         # never a recompute (decisions.md 2026-07-16).
         url = await create_payment_link(
-            payment, planner, payment.charge_requested_cents
+            payment,
+            planner,
+            payment.charge_requested_cents,
+            success_url=_success_url(request),
         )
     except ValueError as err:
         # e.g. the old link already collected — the next roster
@@ -874,6 +889,7 @@ async def settle_route(
             session,
             event,
             planner,
+            success_url=_success_url(request),
             cap_at_estimate=(mode == "cap"),
         )
     except ValueError as err:
@@ -900,3 +916,11 @@ async def settle_route(
             "payments_by_attendee": payments_by_attendee,
         },
     )
+
+
+@router.get("/paid")
+async def paid_page(request: Request) -> Response:
+    # Checkout's success_url lands here (decisions.md 2026-07-16).
+    # Static on purpose: no token, nothing to leak, nothing to poll
+    # — the roster's on-load poll is what records the payment.
+    return templates.TemplateResponse(request, "paid.html", {})
