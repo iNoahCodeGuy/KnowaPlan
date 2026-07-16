@@ -20,7 +20,9 @@ load_dotenv()
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 # Fail loudly if the key is missing — silent failures are worse.
-planner_account_id = os.environ["TEST_PLANNER_ACCOUNT_ID"]
+# (Renamed from TEST_PLANNER_ACCOUNT_ID on 2026-07-16: the live
+# connected account must not live in a variable named "test".)
+planner_account_id = os.environ["PLANNER_ACCOUNT_ID"]
 
 # Single API call: retrieve the connected account by ID.
 # If this succeeds, auth + connectivity are confirmed.

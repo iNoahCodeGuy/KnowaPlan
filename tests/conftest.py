@@ -30,6 +30,10 @@ def no_live_stripe(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("STRIPE_SECRET_KEY", "")
     monkeypatch.setenv("PLANNER_ACCOUNT_ID", "")
     monkeypatch.setenv("CREATE_PASSWORD", "")
+    # Not a secret, but tests must not depend on the developer's
+    # .env: the missing-key page test only passed before because
+    # the local .env happened to misname this variable.
+    monkeypatch.setenv("STRIPE_PUBLISHABLE_KEY", "")
 
 
 @pytest.fixture
