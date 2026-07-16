@@ -2,7 +2,7 @@
 {% block title %}{{ event.title }} — admin{% endblock %}
 {% block content %}
 <h1>{{ event.title }}
-  <span class="badge">{{ event.state }}</span></h1>
+  <span class="badge badge-{{ event.state }}">{{ event.state }}</span></h1>
 <p class="muted">
   Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
   total {{ event.total_cost_cents | dollars }} ·
@@ -81,7 +81,7 @@ the group after you tap this.</p>
           <button>Retry charge</button>
         </form>
         {% else %}
-        {{ payment.state }}
+        <span class="pay pay-{{ payment.state }}">{{ payment.state }}</span>
         {% if payment.charged_cents %}
           ({{ payment.charged_cents | dollars }})
         {% endif %}

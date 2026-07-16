@@ -38,14 +38,15 @@ If they played, have them tap Going on their own link
   <p>The true share ({{ share | dollars }}) is higher than the
   estimate ({{ event.estimated_share_cents | dollars }}). Your
   call — the default is charging the actual share:</p>
-  <button name="mode" value="actual">
+  <button class="primary" name="mode" value="actual">
     Charge actual shares ({{ share | dollars }} each)</button>
   <button name="mode" value="cap">
     Cap at the estimate
     ({{ event.estimated_share_cents | dollars }} each) —
     I absorb {{ capped_shortfall | dollars }}</button>
 {% else %}
-  <button name="mode" value="actual">Settle now</button>
+  <button class="primary" name="mode"
+          value="actual">Settle now</button>
 {% endif %}
 </form>
 <p><a href="/admin/{{ event.admin_token }}">Back to the

@@ -5,28 +5,146 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}KnowaPlan{% endblock %}</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 1.5rem auto;
-           max-width: 40rem; padding: 0 1rem; color: #222; }
-    h1 { font-size: 1.4rem; }
-    h2 { font-size: 1.1rem; margin-top: 1.6rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; padding: .4rem .6rem;
-             border-bottom: 1px solid #ddd; font-size: .95rem; }
-    form.stack label { display: block; margin: .8rem 0 .2rem; }
-    input, select { font-size: 1rem; padding: .4rem; width: 100%;
-                    max-width: 22rem; box-sizing: border-box; }
-    button { font-size: 1rem; padding: .5rem 1rem; margin-top: 1rem;
-             cursor: pointer; }
-    .error { background: #fee; border: 1px solid #c99;
-             padding: .6rem .8rem; }
-    .ok { background: #efe; border: 1px solid #9c9;
-          padding: .6rem .8rem; }
-    .muted { color: #666; font-size: .9rem; }
-    .badge { font-size: .8rem; padding: .1rem .4rem;
-             border: 1px solid #aaa; border-radius: .6rem;
-             white-space: nowrap; }
-    code { background: #f4f4f4; padding: .1rem .3rem;
-           word-break: break-all; }
+    /* Sunny & warm — outdoor-phone-first: light ground, big
+       targets, high contrast (owner-picked 2026-07-16). */
+    :root {
+      --ink: #2a2233;
+      --muted: #7a6f66;
+      --coral: #ff6b4a;
+      --coral-deep: #f04e2e;
+      --teal: #0e9e92;
+      --line: #f0dfc8;
+      --chip-border: #e8d5bc;
+      --surface: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-rounded, "SF Pro Rounded", system-ui,
+                   -apple-system, "Segoe UI", sans-serif;
+      margin: 0 auto; max-width: 40rem;
+      padding: 1.5rem 1rem 3rem; color: var(--ink);
+      background:
+        radial-gradient(60rem 30rem at 90% -10%,
+                        rgba(255, 194, 75, .38), transparent 60%),
+        linear-gradient(160deg, #fff9ef, #ffe9cf);
+      background-attachment: fixed;
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+    ::selection { background: #ffd9a8; }
+    h1 {
+      font-size: 1.7rem; font-weight: 800;
+      letter-spacing: -.01em; line-height: 1.2;
+      margin: .2rem 0 .8rem;
+    }
+    h1::after {
+      content: ""; display: block; width: 3.2rem; height: .35rem;
+      margin-top: .45rem; border-radius: 999px;
+      background: linear-gradient(90deg, var(--coral), #ffc24b);
+    }
+    h2 { font-size: 1.05rem; font-weight: 800; margin-top: 1.8rem; }
+    a {
+      color: var(--teal); font-weight: 600;
+      text-underline-offset: 3px;
+    }
+    table {
+      width: 100%; background: var(--surface);
+      border-collapse: separate; border-spacing: 0;
+      border-radius: 16px;
+      box-shadow: 0 6px 24px rgba(180, 120, 60, .12);
+      display: block; overflow-x: auto;
+      padding: .3rem .2rem;
+    }
+    th, td {
+      text-align: left; padding: .55rem .7rem;
+      border-bottom: 1px solid var(--line); font-size: .95rem;
+    }
+    th {
+      font-size: .72rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted);
+    }
+    tr:last-child td { border-bottom: none; }
+    form.stack {
+      background: var(--surface); padding: 1.1rem 1.2rem 1.3rem;
+      border-radius: 18px; max-width: 26rem;
+      box-shadow: 0 6px 24px rgba(180, 120, 60, .12);
+    }
+    form.stack label {
+      display: block; margin: .85rem 0 .25rem;
+      font-weight: 700; font-size: .9rem;
+    }
+    input, select {
+      font-size: 1rem; padding: .6rem .75rem; width: 100%;
+      max-width: 24rem; border: 1.5px solid var(--chip-border);
+      border-radius: 12px; background: #fffdf8; color: var(--ink);
+    }
+    form.stack input, form.stack select { max-width: 100%; }
+    input:focus-visible, select:focus-visible {
+      outline: none; border-color: var(--coral);
+      box-shadow: 0 0 0 3px rgba(255, 107, 74, .25);
+    }
+    button {
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      padding: .55rem 1.15rem; margin-top: 1rem;
+      border-radius: 999px; border: 2px solid var(--coral);
+      background: var(--surface); color: var(--coral-deep);
+      transition: transform .05s ease;
+    }
+    button:hover { background: #fff3ee; }
+    button:active { transform: translateY(1px); }
+    button[type="submit"], button.primary {
+      background: linear-gradient(135deg, var(--coral), #ff8a3d);
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 14px rgba(255, 107, 74, .35);
+    }
+    button[type="submit"]:hover, button.primary:hover {
+      background: linear-gradient(135deg, var(--coral-deep),
+                                  #ff7a26);
+    }
+    button.danger {
+      background: #e5484d; border-color: transparent; color: #fff;
+      box-shadow: 0 4px 14px rgba(229, 72, 77, .35);
+    }
+    button:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(14, 158, 146, .45);
+    }
+    .error {
+      background: #fff0ec; border: 1px solid #f5a28e;
+      padding: .7rem .9rem; border-radius: 14px;
+    }
+    .ok {
+      background: #e9f8ef; border: 1px solid #7fd6a4;
+      padding: .7rem .9rem; border-radius: 14px;
+    }
+    .muted { color: var(--muted); font-size: .9rem; }
+    .badge {
+      font-size: .78rem; font-weight: 700;
+      padding: .12rem .55rem; border-radius: 999px;
+      border: 1px solid var(--chip-border);
+      background: var(--surface); white-space: nowrap;
+      vertical-align: middle;
+    }
+    .badge-open { background: #e9f8ef; border-color: #7fd6a4;
+                  color: #146b43; }
+    .badge-closed { background: #fff4de; border-color: #f2c879;
+                    color: #8a5b00; }
+    .badge-settled { background: #e6f6f4; border-color: #8ad6cc;
+                     color: #0b6b60; }
+    .badge-cancelled { background: #ffecec; border-color: #f1a0a0;
+                       color: #a33; }
+    .pay { font-weight: 700; }
+    .pay-paid { color: #12805c; }
+    .pay-unpaid { color: #b45309; }
+    .pay-refunded { color: #0b6b60; }
+    .pay-abandoned { color: var(--muted); }
+    .pop { font-size: 3rem; margin: 0; line-height: 1; }
+    code {
+      background: #fff3e0; border: 1px dashed #e9c9a0;
+      border-radius: 10px; padding: .35rem .55rem;
+      display: inline-block; word-break: break-all;
+      font-size: .85rem;
+    }
   </style>
 </head>
 <body>
