@@ -70,7 +70,15 @@
         var resp = await fetch(
           "/r/{{ rsvp.rsvp_token }}/setup-intent",
           {method: "POST"});
-        var data = await resp.json();
+        var data;
+        try {
+          data = await resp.json();
+        } catch (e) {
+          // A crash renders the HTML error page, not JSON —
+          // without this catch the await throws and the button
+          // stays disabled with no message.
+          data = {error: "Something went wrong — reload to try again."};
+        }
         if (!resp.ok) {
           showError(data.error);
           addBtn.disabled = false;

@@ -5,6 +5,10 @@ asyncpg==0.31.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 stripe==15.1.0
+# stripe's *_async methods need an async http client at RUNTIME;
+# httpx only came along locally as a dev dep, so the Docker image
+# lacked it and every deployed Stripe call 500'd (found 2026-07-16)
+httpx==0.28.1
 python-dotenv==1.2.2
 # Web layer (demo slice): server-rendered pages + HTML form posts
 jinja2==3.1.6
