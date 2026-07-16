@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 2 — Where the money actually goes</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Where the money actually goes</h1>
+<p class="subtitle">Lesson 2 · ~12 minutes · Your platform balance is
+negative right now, and your code is the reason</p>
+
+<p>Lesson 1 was about reading a row. This one is about a thing no row
+will ever tell you: <strong>what a charge costs <em>you</em></strong>.</p>
+
+<p>Everything below came out of your own Stripe account on 2026-07-16.
+None of it is hypothetical, and none of it would have been caught by a
+test — your suite mocks Stripe, and a mock has no balance.</p>
+
+<h2>Start with the evidence</h2>
+
+<p>Three test charges. Here's what your platform's ledger says:</p>
+
+<table class="row">
+  <tr><th>transfer</th><td>gross <span class="hot">−$40.00</span> · fee $0.00 · net −$40.00</td></tr>
+  <tr><th>charge</th><td>gross $40.00 · fee <span class="hot">$1.46</span> · net $38.54</td></tr>
+  <tr><th>transfer</th><td>gross −$32.00 · fee $0.00 · net −$32.00</td></tr>
+  <tr><th>charge</th><td>gross $32.00 · fee $1.23 · net $30.77</td></tr>
+  <tr><th>PLATFORM balance</th><td class="hot">available −$1.23 · pending −$1.46</td></tr>
+</table>
+
+<p>Read the $40 as a story. Someone pays $40. Stripe keeps $1.46 and
+hands your platform <strong>$38.54</strong>. Then the transfer moves
+<strong>$40.00</strong> — the <em>full</em> amount — to the planner's
+account. Your platform paid out forty dollars having received
+thirty-eight fifty-four.</p>
+
+<p>It is down $1.46. That is why your balance reads
+<strong>negative</strong>.</p>
+
+<div class="callout">
+  <span class="label">This is not a test-mode quirk</span>
+  Test mode simulates the accounting exactly. In live mode, a negative
+  platform balance is debited from your linked bank account.
+</div>
+
+<h2>Why: one missing parameter</h2>
+
+<p class="note">This is the whole bug surface. Two optional parameters
+your code doesn't pass.</p>
+
+<p>Here is the call, from <a href="../app/payments.py">app/payments.py</a>:</p>
+
+<pre><code>transfer_data={
+    "destination": planner.stripe_account_id,
+},</code></pre>
+
+<p>There's no <code>amount</code> in there. Stripe's
+<a href="https://docs.stripe.com/api/payment_intents/create">API
+reference</a> says what that means:</p>
+
+<blockquote><p><em>“The amount that will be transferred automatically
+when a charge succeeds… <strong>if no amount is set, the full amount is
+transferred</strong>.”</em></p></blockquote>
+
+<p>And <a href="https://docs.stripe.com/connect/charges">Charge
+types</a> says who pays for it:</p>
+
+<blockquote><p><em>“You create a charge on your platform, so the payment
+appears in your platform's balance… <strong>Stripe debits fees from your
+platform's balance.</strong>”</em></p></blockquote>
+
+<p>Full amount out, fee charged to you. There's no third party absorbing
+it. <strong>The platform is you.</strong></p>
+
+<h2>The trap I fell into — watch it, because you will too</h2>
+
+<p>Your account has a setting that reads like the answer:
+<code>controller.fees.payer = "application"</code>, where “application”
+means your platform. It looks like the smoking gun. I called it the
+culprit. <strong>I was wrong</strong>, and the docs say so:</p>
+
+<blockquote><p><em>“Any activity occurring at the platform account level
+is billed to your platform <strong>regardless of the entity responsible
+for fee collection</strong>. For example, Stripe charges the platform
+directly for destination charges…”</em>
+— <a href="https://docs.stripe.com/connect/direct-charges-fee-payer-behavior">Fee
+behavior on connected accounts</a></p></blockquote>
+
+<p>That setting governs <em>direct</em> charges. You make
+<em>destination</em> charges. Flipping it does nothing. Rebuilding as a
+Standard account does nothing either — the fee follows the
+<strong>charge type</strong>, not the account type.</p>
+
+<div class="callout">
+  <span class="label">The transferable lesson</span>
+  A plausible cause that sits right next to the symptom is the most
+  expensive kind of wrong, because it survives review. Your own
+  <a href="../decisions.md">decisions.md</a> does this: the 2026-07-16
+  <code>success_url</code> entry blames “a different Stripe account,”
+  when the param is simply conditioned on <code>ui_mode</code>. The fix
+  was right; the recorded reason was fiction. <strong>A wrong reason in
+  an append-only log doesn't stay contained — it teaches everyone who
+  reads it next.</strong>
+</div>
+
+<h2>Now the part that should bother you</h2>
+
+<p>Four of you. $120 court. You're playing, so you're a divisor but
+never a charge — <a href="../decisions.md">decisions.md</a> 2026-07-16.
+Everyone's share is $30.</p>
+
+<table class="ref">
+<tbody>
+<tr><td>Each friend is charged</td><td><strong>$30.00</strong></td></tr>
+<tr><td>You collect (3 × $30)</td><td>$90.00</td></tr>
+<tr><td>Stripe fees (3 × $1.17), from your platform</td><td>−$3.51</td></tr>
+<tr><td>You paid the court</td><td>−$120.00</td></tr>
+<tr><td><strong>What you actually pay</strong></td>
+    <td class="hot"><strong>$33.51</strong></td></tr>
+</tbody>
+</table>
+
+<p>Your friends pay $30.00. You pay $33.51.</p>
+
+<p>And <a href="../scenarios.md">scenarios.md</a> promises, in your own
+words:</p>
+
+<blockquote><p><em>“Everyone is charged floor(total cost / headcount);
+the planner absorbs the remainder — <strong>at most headcount − 1 cents
+per event</strong>. Nobody is ever charged a cent more than anyone
+else.”</em></p></blockquote>
+
+<p>You bounded that at <strong>3 cents</strong>. Reality is
+<strong>351 cents</strong>, every event, forever. You grilled the
+three-cent rule and shipped the three-hundred-fifty-one-cent one without
+noticing — not because you were careless, but because
+<strong>the fee lives outside the split math entirely</strong>. It isn't
+in <code>settle_event</code>. It isn't in any test. It's in a parameter
+you didn't pass, and it only becomes visible when you point the code at
+a real account and read the ledger.</p>
+
+<p>That sentence is the honest answer to “how does this go into
+production.”</p>
+
+<h2>Check yourself</h2>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="connected">
+  <div class="quiz-stem"><span class="n">1</span>Marcus's $30 charge
+  succeeds. Who ends up holding the $30?</div>
+  <div class="quiz-choices">
+    <button data-key="connected">Planner's connected account</button>
+    <button data-key="platform">Your platform account</button>
+    <button data-key="split">Split between both</button>
+    <button data-key="stripe">Stripe holds it</button>
+  </div>
+  <div class="quiz-fb" data-key="connected"><span class="verdict">Right</span>
+    — the full $30, because <code>transfer_data</code> has no
+    <code>amount</code>. Not $28.83. The whole thing.</div>
+  <div class="quiz-fb" data-key="platform"><span class="verdict">No</span>
+    — it lands there for an instant, then transfers out entirely. The
+    platform is a conduit that pays for the privilege.</div>
+  <div class="quiz-fb" data-key="split"><span class="verdict">No</span>
+    — a split is what <code>transfer_data.amount</code> or
+    <code>application_fee_amount</code> would buy you. You pass neither.</div>
+  <div class="quiz-fb" data-key="stripe"><span class="verdict">No</span>
+    — Stripe keeps only its fee, and it takes that from the platform.</div>
+</div>
+
+<div class="quiz-q" data-answer="minus">
+  <div class="quiz-stem"><span class="n">2</span>Same charge. How does
+  your <em>platform</em> balance move?</div>
+  <div class="quiz-choices">
+    <button data-key="plus30">Plus thirty dollars</button>
+    <button data-key="minus">Minus one seventeen</button>
+    <button data-key="zero">Exactly zero change</button>
+    <button data-key="plus117">Plus one seventeen</button>
+  </div>
+  <div class="quiz-fb" data-key="minus"><span class="verdict">Right</span>
+    — in $28.83 net, out $30.00 transferred. You're down $1.17. Your real
+    ledger shows exactly this: −$1.46 on a $40 charge.</div>
+  <div class="quiz-fb" data-key="zero"><span class="verdict">No</span>
+    — and this is the intuition that costs money. “It passed through, so
+    it nets out” assumes the fee came from somewhere else. It didn't.</div>
+  <div class="quiz-fb" data-key="plus30"><span class="verdict">No</span>
+    — all $30 transfers straight out to the connected account.</div>
+  <div class="quiz-fb" data-key="plus117"><span class="verdict">No</span>
+    — that's the direction a platform <em>taking</em> a fee would move.
+    You aren't taking one; you're paying one.</div>
+</div>
+
+<div class="quiz-q" data-answer="nothing">
+  <div class="quiz-stem"><span class="n">3</span>You rebuild the
+  connected account as a proper <strong>Standard</strong> account — the
+  thing CLAUDE.md claims you're using — specifically hoping the planner
+  absorbs Stripe's fee. What changes?</div>
+  <div class="quiz-choices">
+    <button data-key="nothing">Nothing at all</button>
+    <button data-key="account">Connected account pays</button>
+    <button data-key="half">Fee gets halved</button>
+    <button data-key="refund">Platform gets reimbursed</button>
+  </div>
+  <div class="quiz-fb" data-key="nothing"><span class="verdict">Right —
+    and this is the one I got wrong</span>
+    — the fee follows the <em>charge type</em>, not the account type.
+    Destination charges bill the platform “regardless of the entity
+    responsible for fee collection.” Standard would change your
+    dashboard and your negative-balance liability. It would not move one
+    cent of this fee.</div>
+  <div class="quiz-fb" data-key="account"><span class="verdict">No — but
+    you're in good company</span>
+    — Standard <em>does</em> set <code>fees.payer: "account"</code>, and
+    that reads exactly like the fix. It only governs <strong>direct</strong>
+    charges. You make destination charges. This is the trap: the setting
+    is real, the name is right, and it does nothing here.</div>
+  <div class="quiz-fb" data-key="half"><span class="verdict">No</span>
+    — nothing about account type touches the rate.</div>
+  <div class="quiz-fb" data-key="refund"><span class="verdict">No</span>
+    — no mechanism reimburses a platform for processing fees.</div>
+</div>
+
+<div class="quiz-q" data-answer="3351">
+  <div class="quiz-stem"><span class="n">4</span>$120 court, four
+  players including you, everyone's share is $30. Your friends each pay
+  $30.00. <strong>What do you actually pay?</strong></div>
+  <div class="quiz-choices">
+    <button data-key="3000">$30.00 exactly</button>
+    <button data-key="3351">$33.51 exactly</button>
+    <button data-key="2883">$28.83 exactly</button>
+    <button data-key="12000">$120.00 exactly</button>
+  </div>
+  <div class="quiz-fb" data-key="3351"><span class="verdict">Right</span>
+    — $120 out, $90 back, minus $3.51 in fees on the three charges. You
+    pay $3.51 more than every friend, every single event. Your
+    <a href="../scenarios.md">scenarios.md</a> says “nobody is ever
+    charged a cent more than anyone else” and bounds your loss at 3
+    cents. It's 351.</div>
+  <div class="quiz-fb" data-key="3000"><span class="verdict">No</span>
+    — that's what the docs <em>promise</em>. It's what the split math
+    computes. It is not what leaves your bank account, and the gap is the
+    entire point of this lesson.</div>
+  <div class="quiz-fb" data-key="2883"><span class="verdict">No</span>
+    — that's a $30 charge net of fees. Nobody actually pays this; it's
+    what the platform receives before transferring the full $30 out.</div>
+  <div class="quiz-fb" data-key="12000"><span class="verdict">No</span>
+    — you front the court, but you do collect $90 back.</div>
+</div>
+
+</section>
+
+<h2>What you do about it — not today</h2>
+
+<p>You have a real decision here, and four ways to go: absorb it (status
+quo), transfer less than the share via
+<code>transfer_data.amount</code>, take it back via
+<code>application_fee_amount</code>, or gross the charge up so attendees
+cover it. Each has a different answer to <em>“is it fair that the
+organizer pays extra?”</em></p>
+
+<div class="callout">
+  <span class="label">My recommendation: change nothing before 7/29</span>
+  You are 13 days from a live event and the system <em>works</em>. Editing
+  charge math now — with no auto-settle timer, no webhooks, and a suite
+  that mocks Stripe and therefore cannot see fees at all — trades a known
+  $3.51 for an unknown bug in the money path. That is a bad trade at any
+  price. <strong>Record the decision, run the event, fix it after.</strong>
+  What's urgent isn't the code; it's that
+  <a href="../scenarios.md">scenarios.md</a> currently states something
+  false.
+</div>
+
+<div class="sourcebox">
+  <span class="label">Read next — primary source</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="https://docs.stripe.com/connect/charges"><strong>Charge
+  types</strong></a> — Stripe</p>
+  <p style="margin:0;font-size:.87rem">Read only the “Destination
+  charges” section — about five minutes. It's the shape of your entire
+  money path in one diagram, and it states both facts this lesson turns
+  on: fees debit the platform, and so do disputes and refunds. That last
+  one matters more than the fee. A single $30 dispute costs you the $30
+  <em>plus</em> a $15 dispute fee — and you'd be recovering it from your
+  own connected account.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Good ones for right now: <em>“why is the platform a separate account
+  from the connected one if they're both me?”</em> · <em>“what happens
+  to the negative balance if I never fix it?”</em> · <em>“would
+  <code>application_fee_amount</code> even do anything when I'm both
+  sides?”</em> That last one is sharper than it looks.
+</div>
+
+<div class="footer">
+  <p><strong>Verification note.</strong> Every number here came from your
+  account on 2026-07-16 (<code>BalanceTransaction.list</code>,
+  <code>Account.retrieve</code>). The 2.9% + 30¢ rate is confirmed
+  empirically — $40 → $1.46, $32 → $1.23, both exact — and published on
+  <a href="https://stripe.com/pricing">stripe.com/pricing</a>, though
+  notably <em>not</em> on docs.stripe.com. Your account is correctly
+  configured and Express-equivalent; <code>type: "none"</code> is expected.
+  Nothing here is broken. It's just more expensive than your docs say.</p>
+  <p><a href="0001-read-the-payment-row.html">← Lesson 1</a> ·
+     <a href="../MISSION.md">Mission</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../RESOURCES.md">Resources</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
