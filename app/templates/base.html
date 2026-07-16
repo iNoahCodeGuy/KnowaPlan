@@ -139,6 +139,43 @@
     .pay-refunded { color: #0b6b60; }
     .pay-abandoned { color: var(--muted); }
     .pop { font-size: 3rem; margin: 0; line-height: 1; }
+    .people {
+      list-style: none; padding: 0; margin: .8rem 0;
+      display: grid; gap: .8rem;
+    }
+    .person {
+      background: var(--surface); border-radius: 16px;
+      padding: .9rem 1rem 1rem;
+      box-shadow: 0 6px 24px rgba(180, 120, 60, .12);
+    }
+    .person-head {
+      display: flex; justify-content: space-between;
+      align-items: baseline; gap: .5rem; flex-wrap: wrap;
+    }
+    .person-name { font-weight: 800; font-size: 1.05rem; }
+    .person-meta { margin: .35rem 0 0; }
+    .person-pay { margin-top: .3rem; }
+    .person-pay form { display: inline; }
+    .person button { margin-top: .6rem; padding: .5rem 1rem; }
+    .person-actions { display: flex; gap: .6rem; }
+    .person-actions button { flex: 1; }
+    .person p { margin: .45rem 0 0; }
+    .actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+    .actions button { margin-top: .4rem; }
+    .settle-choices button {
+      display: block; width: 100%; margin-top: .8rem;
+    }
+    form.stack button[type="submit"] { width: 100%; }
+    .btnish {
+      display: inline-block; margin-top: .5rem;
+      padding: .5rem 1.1rem; border: 2px solid var(--teal);
+      border-radius: 999px; text-decoration: none;
+      color: var(--teal); font-weight: 700;
+    }
+    /* The crashed-charge state gets no color rule of its own:
+       this stylesheet ships on EVERY page, and a pinned test
+       guards that a mint-failure report never contains that
+       state's name. It still renders bold via .pay. */
     code {
       background: #fff3e0; border: 1px dashed #e9c9a0;
       border-radius: 10px; padding: .35rem .55rem;

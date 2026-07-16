@@ -33,7 +33,8 @@ If they played, have them tap Going on their own link
 <p class="muted">Settling closes RSVPs first.</p>
 {% endif %}
 
-<form method="post" action="/admin/{{ event.admin_token }}/settle">
+<form class="settle-choices" method="post"
+      action="/admin/{{ event.admin_token }}/settle">
 {% if over_estimate %}
   <p>The true share ({{ share | dollars }}) is higher than the
   estimate ({{ event.estimated_share_cents | dollars }}). Your

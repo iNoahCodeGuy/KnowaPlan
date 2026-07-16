@@ -19,22 +19,19 @@ the group after you tap this.</p>
 {% endif %}
 
 {% if event.state in ["open", "closed"] %}
-<p>
+<div class="actions">
+<form method="get" action="/admin/{{ event.admin_token }}/settle">
+  <button class="primary">Settle up</button>
+</form>
 {% if event.state == "open" %}
-<form method="post" action="/admin/{{ event.admin_token }}/close"
-      style="display:inline">
+<form method="post" action="/admin/{{ event.admin_token }}/close">
   <button>Close RSVPs</button>
 </form>
 {% endif %}
-<form method="get" action="/admin/{{ event.admin_token }}/settle"
-      style="display:inline">
-  <button>Settle up</button>
-</form>
-<form method="get" action="/admin/{{ event.admin_token }}/cancel"
-      style="display:inline">
+<form method="get" action="/admin/{{ event.admin_token }}/cancel">
   <button>Cancel event…</button>
 </form>
-</p>
+</div>
 {% endif %}
 
 <h2>Share link</h2>
@@ -42,34 +39,24 @@ the group after you tap this.</p>
 
 <h2>Roster</h2>
 {% if rows %}
-<table>
-  <tr><th>Who</th><th>Answer</th><th>Card</th>
-      <th>Attendance</th><th>Payment</th></tr>
+<ul class="people">
   {% for rsvp, attendee in rows %}
-  <tr>
-    <td>{{ attendee.name }}
+  <li class="person">
+    <div class="person-head">
+      <span class="person-name">{{ attendee.name }}</span>
+      <span class="badge">{{ rsvp.state }}</span>
+    </div>
+    <p class="person-meta">
       {% if planner and planner.attendee_id == attendee.id %}
       <span class="badge">you — never charged</span>
-      {% endif %}</td>
-    <td>{{ rsvp.state }}</td>
-    <td>{% if attendee.stripe_payment_method_id %}
-        <span class="badge">card on file</span>
-        {% else %}<span class="muted">no card</span>
-        {% endif %}</td>
-    <td>{{ rsvp.attendance }}
-      {% if rsvp.state == "going"
-            and rsvp.attendance == "unconfirmed"
-            and event.state in ["open", "closed"] %}
-      <form method="post"
-            action="/admin/{{ event.admin_token }}/attendance">
-        <input type="hidden" name="rsvp_id"
-               value="{{ rsvp.id }}">
-        <button name="present" value="yes">present</button>
-        <button name="present" value="no">absent</button>
-      </form>
       {% endif %}
-    </td>
-    <td>
+      {% if attendee.stripe_payment_method_id %}
+      <span class="badge">card on file</span>
+      {% else %}<span class="muted">no card</span>
+      {% endif %}
+      <span class="muted">· {{ rsvp.attendance }}</span>
+    </p>
+    <div class="person-pay">
       {% set payment = payments.get(attendee.id) %}
       {% if payment %}
         {% if payment.state == "none"
@@ -101,10 +88,20 @@ the group after you tap this.</p>
           later</span>
         {% endif %}
       {% else %}<span class="muted">—</span>{% endif %}
-    </td>
-  </tr>
+    </div>
+    {% if rsvp.state == "going"
+          and rsvp.attendance == "unconfirmed"
+          and event.state in ["open", "closed"] %}
+    <form class="person-actions" method="post"
+          action="/admin/{{ event.admin_token }}/attendance">
+      <input type="hidden" name="rsvp_id" value="{{ rsvp.id }}">
+      <button name="present" value="yes">present</button>
+      <button name="present" value="no">absent</button>
+    </form>
+    {% endif %}
+  </li>
   {% endfor %}
-</table>
+</ul>
 {% else %}
 <p class="muted">Nobody yet — text the share link.</p>
 {% endif %}
