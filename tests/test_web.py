@@ -318,3 +318,21 @@ async def test_paid_page_renders(client: AsyncClient) -> None:
     resp = await client.get("/paid")
     assert resp.status_code == 200
     assert "Payment received" in resp.text
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="gross_up step: creation stores the grossed estimate "
+    "(shaping call 3, confirmed 2026-07-18)",
+)
+async def test_create_event_estimate_is_grossed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    planner_account: str,
+) -> None:
+    """The number quoted at RSVP is the number that hits the card:
+    estimated_share_cents stores gross_up(total // goal) — $120 at
+    goal 4 quotes $31.21, not $30.00. When this wires, the older
+    == 3000 assertion above flips to 3121 in the same edit."""
+    event = await _created_event(client, db_session)
+    assert event.estimated_share_cents == 3121

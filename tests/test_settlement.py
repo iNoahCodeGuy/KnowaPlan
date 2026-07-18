@@ -898,3 +898,123 @@ class TestRetryDangling:
         assert payment.state == "unpaid"
         assert payment.state_reason == "no_card"
         assert payment.stripe_checkout_session_id == "cs_9"
+
+
+_grossup = pytest.mark.xfail(
+    strict=True,
+    reason="gross_up step: settlement wiring is owner-authored "
+    "against these (NOTES.md checkpoint, 2026-07-18)",
+)
+
+
+class TestGrossUp:
+    """The gross-up wiring (shaping calls confirmed 2026-07-18):
+    every billed surface — the Stripe amount, the record-first
+    stamp, charged_cents — carries gross_up(share); the report
+    shows share/billed/netted; the cap compares grossed-to-grossed.
+    RED until settlement.py is wired; the existing un-grossed
+    assertions elsewhere in this file get updated in that step."""
+
+    @_grossup
+    async def test_billed_amount_is_grossed_up_share(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """$120 ÷ 4 (planner plays) = $30.00 net share, billed
+        $31.21 — stamp, Stripe kwarg, and charged_cents all agree,
+        and the report separates split / billed / netted."""
+        event = await _seed_event(db_session)
+        await _planner_plays(db_session, event)
+        for n in (1, 3, 4):
+            await _seed_present_carded(
+                db_session, event, f"+1555000000{n}"
+            )
+        planner = await db_session.get(Planner, event.planner_id)
+        mock_stripe.PaymentIntent.create_async = _succeeding_pi()
+
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+        )
+
+        assert report.share_cents == 3000
+        assert report.billed_cents == 3121
+        assert report.netted_cents == 3000
+        assert report.shortfall_cents == 0
+        calls = (
+            mock_stripe.PaymentIntent.create_async.await_args_list
+        )
+        assert [c.kwargs["amount"] for c in calls] == [3121] * 3
+        payments = await _payments(db_session)
+        assert all(
+            p.charge_requested_cents == 3121
+            and p.charged_cents == 3121
+            for p in payments
+        )
+
+    @_grossup
+    async def test_cap_compares_grossed_to_grossed(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """Actual == quoted, so the cap must be a no-op. The
+        estimate is STORED grossed ($31.21 quoting a $30.00 net);
+        the old min(net, gross) would bill only $30.00 and
+        silently under-net the planner by the whole fee."""
+        event = await _seed_event(
+            db_session, estimated_share_cents=3_121
+        )
+        await _planner_plays(db_session, event)
+        for n in (1, 3, 4):
+            await _seed_present_carded(
+                db_session, event, f"+1555000000{n}"
+            )
+        planner = await db_session.get(Planner, event.planner_id)
+        mock_stripe.PaymentIntent.create_async = _succeeding_pi()
+
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+            cap_at_estimate=True,
+        )
+
+        assert report.billed_cents == 3121
+        assert report.netted_cents == 3000
+        assert report.shortfall_cents == 0
+
+    @_grossup
+    async def test_cap_absorbs_in_net_terms(
+        self, db_session: AsyncSession, mock_stripe: MagicMock
+    ) -> None:
+        """Three of the goal-four show: share $40.00 > quoted.
+        Cap mode bills the quoted gross ($31.21), nets the quoted
+        net ($30.00), and the absorbed gap is reported in NET
+        terms: ($40 − $30) × 3 charged = $30.00 — never silent."""
+        event = await _seed_event(
+            db_session, estimated_share_cents=3_121
+        )
+        for n in (1, 3, 4):
+            await _seed_present_carded(
+                db_session, event, f"+1555000000{n}"
+            )
+        planner = await db_session.get(Planner, event.planner_id)
+        mock_stripe.PaymentIntent.create_async = _succeeding_pi()
+
+        report = await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://app.example/paid",
+            cap_at_estimate=True,
+        )
+
+        assert report.share_cents == 4000
+        assert report.billed_cents == 3121
+        assert report.netted_cents == 3000
+        assert report.shortfall_cents == 3000
+        calls = (
+            mock_stripe.PaymentIntent.create_async.await_args_list
+        )
+        assert [c.kwargs["amount"] for c in calls] == [3121] * 3
