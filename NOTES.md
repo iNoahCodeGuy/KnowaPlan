@@ -78,7 +78,8 @@ the only option that moves his bottom line.
 6. Cap-and-absorb comparison? → *Recommended:* grossed-to-grossed, or
    `min()` compares different units and the cap fires spuriously.
 
-**KNOWN BUG in my own draft — do not ship it as written:**
+**CORRECTED 2026-07-18 — the earlier "known bug" note was itself
+wrong (re-verified across every share value $1–$500):**
 
 ```python
 def gross_up(share_cents: int) -> int:
@@ -86,32 +87,104 @@ def gross_up(share_cents: int) -> int:
     denominator = 10_000 - PCT_BPS
     return -(-numerator // denominator)   # ceil, integers only
 ```
-Verified against the real ledger (Stripe rounds the pct: $32 → $1.23,
-i.e. 92.8 → 93):
-- share $30.00 → gross_up $31.21 → fee $1.21 → nets **$30.00** ✓
-- share $40.00 → gross_up $41.47 → fee $1.50 → nets **$39.97** ✗ (−3¢)
+This draft NEVER under-collects. It OVER-collects +1¢ on ~51% of
+share values $1–$500:
+- share $30.00 → bills $31.21 → fee $1.21 → nets **$30.00** ✓ exact
+- share $40.00 → bills $41.51 → fee $1.50 → nets **$40.01** ✗ (+1¢)
+  (the old note's $41.47 / −3¢ figures were miscomputed)
 
-The formula does not invert Stripe's rounding exactly. **Write the
-property test first** (`charge − fee(charge) == share` across
-$1–$500); it will fail and pin the real formula.
+The honest formula is a search, not a ceil-inversion: the SMALLEST
+charge c with c − fee(c) ≥ share, where fee(c) =
+round-half-up(2.9% × c) + 30¢. That nets EXACTLY the share on every
+value $1–$500. The property test pins both halves — make-whole AND
+minimal. Flagged gap: Stripe's rounding mode at exact half-cents is
+unverified; the empirical ledger never hit one.
 
 **Owner still owes:** confirm/overrule the six calls, and say whether
 he writes `gross_up` against my failing tests, or reviews a full draft
 line by line (CLAUDE.md: money code is not authored wholesale).
 
+## Session log — 2026-07-17 (mission widened; Lesson 3 + the map)
+
+- Noah deleted MISSION.md and re-invoked /teach: "what do I need to
+  know about this codebase" — architecture, decisions, how the code
+  works, deployment, feature work, explainability; "not just vibe
+  code." MISSION.md rewritten around whole-codebase ownership (old
+  text preserved in git, commit a472e7a); learning-records/0003
+  records the widening. 7/29 remains the spine; ~7/19 freeze noted.
+- Shipped **Lesson 3, "The shape of the codebase"** + the
+  **codebase map** (reference/codebase-map.html) — the map is now
+  the curriculum's table of contents, with territory statuses, and
+  the direct answer to "what do I need to know."
+- Verified before teaching, not assumed: web.py assigns zero state
+  columns (grepped), payments.py never commits (read), settlement.py
+  imports stripe only for exception types. FastAPI router +
+  dependencies-with-yield and SQLAlchemy asyncio pages fetched and
+  quoted — the stack gap in RESOURCES.md is closed.
+- Lesson 3 completion is UNVERIFIED — no quiz answers observed yet.
+  Confirm the placement rules landed before building the
+  transactions lesson on top of them.
+- **Review quiz (lessons/0004) result: 6/7, sole miss Q6.** Both
+  money-losing diagnosis traps (Q3 dangling, Q5 pi_-not-receipt)
+  correct — Lesson 1 skill is durable. Q6 (which line of code sends
+  the full transfer = `transfer_data` w/ no `amount`) was the miss,
+  with Q2/Q4 correct: concept solid, concept→code mapping thin. See
+  learning-records/0004.
+- **Lesson 3 quiz: 2/4** — missed Q3 (who commits after
+  charge_share → settlement.py) and Q4 (internal-host links → the
+  Dockerfile proxy flags); got Q1/Q2 (transition-table / state
+  ownership). THIRD consistent data point: every miss he's made
+  (review Q6, L3 Q3, L3 Q4) is the concept→code seam. Design layer
+  perfect; substrate-mapping thin. See learning-records/0005. Named
+  the pattern to him explicitly.
+- **BUILT Lesson 4** (lessons/0005-follow-one-charge-through-the-
+  code.html): line-by-line trace of one $30 — COMMIT #1 stamp →
+  charge_share (no session param = can't commit; transfer_data no
+  amount) → _collect COMMIT #2. Knockout for Q3 = the signature has
+  no session. Closes Q3 + Q6, re-grounds Lesson 1's crash map.
+  UNVERIFIED (no quiz result yet). Quiz wiring browser-tested OK.
+- **Still open / queued:** (a) L3 Q4 deployment lesson — proxy
+  flags, request.base_url, the no-BASE_URL decision — its own
+  territory, NOT in Lesson 4. (b) async lesson (await on the Stripe
+  call + roster poll). (c) reassess whether the standalone
+  transactions-concept lesson is still needed or now folds into
+  async, since Lesson 4 gave the commit boundary concretely.
+
+## Session log — 2026-07-18 (lineages merged; checkpoint corrected)
+
+- Found a fork: the 2026-07-17 local session above was never
+  committed or pushed, so the web session — unaware of it — built
+  the record-first concept lesson as a second "Lesson 3" (commit
+  74dda83 on claude/knowaplan-teach-continue-sydfoq). Owner chose:
+  keep both. The web lesson is now lessons/0006, retitled Lesson 5;
+  the whole lineage lives on that branch, committed and pushed.
+  The two overlap by design, not by accident: local Lesson 4 is the
+  code-level trace, web Lesson 5 the transaction concept under it.
+- Corrected the checkpoint's gross_up claim (see above): the draft
+  over-collects +1¢ on ~51% of values, never under; honest formula
+  = smallest make-whole charge. Owner confirmed recording.
+- Lesson 5 (0006) quiz: unverified — ask for the score.
+- LIVE connected account confirmed: acct_1TuKMK1a8RMP4gcA,
+  card_payments + payouts active. Supersedes earlier notes'
+  references to the test-mode account check.
+- Owner un-parked gross_up (chose it over the settle_event lesson
+  and the production checklist; feature freeze ~7/19). Next queued
+  lesson remains settle_event end-to-end.
+
 ## Open threads / candidate next lessons
 
-1. **Lesson 2 (queued): "Why the stamp and the state can't be one
-   write."** What a transaction/commit is; why Stripe can't be in it;
-   why record-first is the only honest option. Row 2 of Lesson 1 is the
-   hook. Needs the SQLAlchemy resource gap closed first.
-2. **The production gap lesson.** What actually stands between here and
-   7/29 — the `card_payments` capability blocker is the headline. This
-   may need to jump the queue; it's a real blocker, not a concept.
-3. Reading `settle_event` end to end — the loop, the per-attendee
+1. **Transactions & record-first mechanics** — what a commit
+   guarantees, why Stripe can't be inside one, the two-commit
+   choreography. SQLAlchemy source verified; still want a
+   commit-semantics primary source (RESOURCES gaps). NEXT in queue.
+2. async/await — anchored to charge_share and the roster poll.
+3. Reading `settle_event` end to end — the loop, per-attendee
    failure containment, the planner-skip.
 4. The capability-URL model as *the* auth story (and its accepted risk).
-5. Where the money actually lands: Connect, `on_behalf_of`, fees.
+5. Deployment & live-flip drill — runbook rehearsal before 7/29.
+6. ~~Where the money actually lands~~ → became Lesson 2.
+7. ~~Production gap / `card_payments` blocker~~ → resolved, not a
+   blocker (findings below); folded into the map's open-items table.
 
 ## Glossary
 
@@ -159,7 +232,10 @@ is currently false.**
    recommends `VARCHAR(255)`.
 4. ~~`card_payments` capability — 7/29 blocker~~ **RESOLVED, not a
    blocker.** Checked the account: `card_payments: active`,
-   `charges_enabled: true`, `currently_due: []`.
+   `charges_enabled: true`, `currently_due: []`. *(That check was
+   the test-mode account; re-confirmed 2026-07-18 on the LIVE
+   account `acct_1TuKMK1a8RMP4gcA` — card_payments + payouts
+   active.)*
 5. "Never re-fire a saved card" is self-imposed, not a Stripe limit.
 6. **CLAUDE.md + decisions.md say "Connect (Standard)". It isn't.**
    The account is Express-equivalent (`type: "none"`, controller

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review — Lessons 1 &amp; 2</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Review — reading the row, and where the money goes</h1>
+<p class="subtitle">Interleaved retrieval · ~8 minutes · Lessons 1 and 2,
+shuffled together on purpose</p>
+
+<p>These seven questions mix both lessons deliberately. Recalling
+"which column tells the truth" right after "who eats the fee" is
+harder than reviewing each lesson on its own — and that difficulty is
+the point. It's what moves this from <em>I recognise it</em> to
+<em>I can pull it up cold at the court</em>. One shot each. Commit
+before you tap; the wrong answers are where the teaching is.</p>
+
+<section class="quiz" data-quiz>
+
+<!-- Q1 · L1 · the one-rule column -->
+<div class="quiz-q" data-answer="state">
+  <div class="quiz-stem"><span class="n">1</span>You want to know if
+  one attendee's money actually moved. Which single column answers
+  it?</div>
+  <div class="quiz-choices">
+    <button data-key="state">The state column</button>
+    <button data-key="pi">The intent id</button>
+    <button data-key="stamp">The requested stamp</button>
+    <button data-key="reason">The reason column</button>
+  </div>
+  <div class="quiz-fb" data-key="state"><span class="verdict">Right</span>
+    — <code>state</code> is the verdict. <code>charged_cents</code> tells
+    you <em>how much</em>, but <code>state</code> is the only column that
+    says <em>whether</em>. Everything else is evidence.</div>
+  <div class="quiz-fb" data-key="pi"><span class="verdict">No</span>
+    — <code>stripe_payment_intent_id</code> is the single biggest liar in
+    the row. It's present on declines too. It's an <em>attempt</em>, never
+    a receipt.</div>
+  <div class="quiz-fb" data-key="stamp"><span class="verdict">No</span>
+    — <code>charge_requested_at</code> means we were <em>about to</em>
+    charge. Set ≠ charged. That's the whole dangling trap.</div>
+  <div class="quiz-fb" data-key="reason"><span class="verdict">No</span>
+    — <code>state_reason</code> tells you <em>why</em> you landed
+    somewhere, not whether money moved. It's a footnote to
+    <code>state</code>.</div>
+</div>
+
+<!-- Q2 · L2 · who eats the fee -->
+<div class="quiz-q" data-answer="platform">
+  <div class="quiz-stem"><span class="n">2</span>Marcus's $30 charge
+  succeeds cleanly. Who ends up paying Stripe's ~$1.17 fee?</div>
+  <div class="quiz-choices">
+    <button data-key="platform">Your platform account</button>
+    <button data-key="payer">Marcus who paid</button>
+    <button data-key="connected">The connected account</button>
+    <button data-key="stripe">Stripe eats it</button>
+  </div>
+  <div class="quiz-fb" data-key="platform"><span class="verdict">Right</span>
+    — Stripe debits the fee from your <em>platform</em> balance. $28.83
+    comes in, $30.00 transfers out, you're down $1.17. That's why your real
+    balance reads negative.</div>
+  <div class="quiz-fb" data-key="payer"><span class="verdict">No</span>
+    — Marcus pays exactly $30, the whole of which transfers to the planner.
+    Grossing the charge up so the payer covers the fee is a change you
+    haven't made yet.</div>
+  <div class="quiz-fb" data-key="connected"><span class="verdict">No</span>
+    — the full $30 <em>lands</em> there, but the fee was already taken from
+    the platform before the transfer. The connected account pays nothing.</div>
+  <div class="quiz-fb" data-key="stripe"><span class="verdict">No</span>
+    — Stripe keeps the fee; it doesn't absorb it. It takes it straight from
+    the platform, which is you.</div>
+</div>
+
+<!-- Q3 · L1 · dangling row -->
+<div class="quiz-q" data-answer="dangling">
+  <div class="quiz-stem"><span class="n">3</span>You hit Settle, the page
+  hung, you lost signal. The row now reads
+  <code>state=none</code>, <code>charge_requested_at</code> set,
+  <code>charged_cents=NULL</code>. What is it, and what do you do?</div>
+  <div class="quiz-choices">
+    <button data-key="dangling">Dangling, then retry</button>
+    <button data-key="pristine">Pristine, do nothing</button>
+    <button data-key="declined">Declined, send link</button>
+    <button data-key="collected">Collected, tell them</button>
+  </div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">Right</span>
+    — stamp set, state still <code>none</code>: we told Stripe to take $30
+    and never heard back. Money may or may not have moved. Press
+    <strong>Retry</strong> — same key, stamped amount, so Stripe replays the
+    real outcome.</div>
+  <div class="quiz-fb" data-key="pristine"><span class="verdict">No — the
+    expensive one</span> — pristine needs the stamp <em>NULL</em>. Here it's
+    set. Treating "we tried" as "nothing happened" is exactly how you
+    double-charge Marcus.</div>
+  <div class="quiz-fb" data-key="declined"><span class="verdict">No</span>
+    — a decline lands the row in <code>unpaid</code> with a reason. This row
+    is <code>none</code>: Stripe never answered, so there's no decline to
+    read.</div>
+  <div class="quiz-fb" data-key="collected"><span class="verdict">No</span>
+    — collected means <code>state=paid</code>. You cannot claim collection
+    from a row that never resolved. Retry and let Stripe tell you.</div>
+</div>
+
+<!-- Q4 · L2 · the Standard trap -->
+<div class="quiz-q" data-answer="nothing">
+  <div class="quiz-stem"><span class="n">4</span>Hoping the planner's
+  account absorbs the fee, you rebuild it as a proper Standard account.
+  What changes about who pays Stripe?</div>
+  <div class="quiz-choices">
+    <button data-key="nothing">Nothing changes at all</button>
+    <button data-key="account">Connected account now pays</button>
+    <button data-key="half">Fee is cut half</button>
+    <button data-key="reimbursed">Platform gets fully reimbursed</button>
+  </div>
+  <div class="quiz-fb" data-key="nothing"><span class="verdict">Right</span>
+    — the fee follows the <em>charge type</em>, not the account type. You
+    make destination charges; those bill the platform "regardless of the
+    entity responsible for fee collection." Standard changes your dashboard,
+    not this fee.</div>
+  <div class="quiz-fb" data-key="account"><span class="verdict">No — but
+    it's the trap I fell into</span> — Standard <em>does</em> set
+    <code>fees.payer: account</code>, which reads like the fix. It only
+    governs <strong>direct</strong> charges. Yours are destination charges.</div>
+  <div class="quiz-fb" data-key="half"><span class="verdict">No</span>
+    — nothing about account type touches the rate. 2.9% + 30¢ either way.</div>
+  <div class="quiz-fb" data-key="reimbursed"><span class="verdict">No</span>
+    — no mechanism reimburses a platform for processing fees. The only fix
+    is charging more or transferring less.</div>
+</div>
+
+<!-- Q5 · L1 · the PI trap -->
+<div class="quiz-q" data-answer="no">
+  <div class="quiz-stem"><span class="n">5</span>Dave's row:
+  <code>state=unpaid</code>, a <code>pi_…</code> id is present,
+  <code>state_reason=insufficient_funds</code>. Did his money move?</div>
+  <div class="quiz-choices">
+    <button data-key="no">No, attempt was declined</button>
+    <button data-key="yes">Yes, charge fully succeeded</button>
+    <button data-key="unknown">Unknown, outcome still pending</button>
+    <button data-key="partial">Yes, but only partially</button>
+  </div>
+  <div class="quiz-fb" data-key="no"><span class="verdict">Right</span>
+    — the <code>pi_…</code> is the record of the <em>declined</em> attempt,
+    which is why we stored it: the DB must know everything Stripe knows.
+    <code>state=unpaid</code> is the verdict. Text him the link; never
+    re-fire the saved card.</div>
+  <div class="quiz-fb" data-key="yes"><span class="verdict">No — the
+    trap</span> — you read <code>pi_…</code> as a receipt. It isn't.
+    <code>charged_cents</code> is <code>NULL</code> and the reason says
+    <code>insufficient_funds</code>. Only <code>state</code> says money
+    moved.</div>
+  <div class="quiz-fb" data-key="unknown"><span class="verdict">No</span>
+    — unknown is <em>dangling</em> (<code>state=none</code>). Here you know
+    exactly: the bank declined and told you why. This resolved.</div>
+  <div class="quiz-fb" data-key="partial"><span class="verdict">No</span>
+    — there's no partial charge here. The attempt was declined outright;
+    nothing collected.</div>
+</div>
+
+<!-- Q6 · L2 · the missing parameter -->
+<div class="quiz-q" data-answer="transfer">
+  <div class="quiz-stem"><span class="n">6</span>The whole $30 leaves your
+  platform <em>and</em> you still eat the fee. Which single thing in the
+  code makes the full amount transfer out?</div>
+  <div class="quiz-choices">
+    <button data-key="transfer">transfer_data has no amount</button>
+    <button data-key="account">The account type is Standard</button>
+    <button data-key="feespayer">The fees.payer flag flipped</button>
+    <button data-key="onbehalf">The on_behalf_of is wrong</button>
+  </div>
+  <div class="quiz-fb" data-key="transfer"><span class="verdict">Right</span>
+    — Stripe's API: "if no amount is set, the full amount is transferred."
+    Your <code>transfer_data</code> passes only <code>destination</code>, no
+    <code>amount</code> — so all $30 goes, and the fee hits the platform.</div>
+  <div class="quiz-fb" data-key="account"><span class="verdict">No</span>
+    — account type governs your dashboard and negative-balance liability,
+    not how much transfers. That's Question 4's trap.</div>
+  <div class="quiz-fb" data-key="feespayer"><span class="verdict">No</span>
+    — <code>fees.payer</code> is a direct-charge lever. It does nothing to a
+    destination charge, and it isn't what sends the full amount out.</div>
+  <div class="quiz-fb" data-key="onbehalf"><span class="verdict">No</span>
+    — <code>on_behalf_of</code> sets the merchant of record; it's correct.
+    It doesn't control the transfer amount.</div>
+</div>
+
+<!-- Q7 · L1 · unpaid is normal -->
+<div class="quiz-q" data-answer="normal">
+  <div class="quiz-stem"><span class="n">7</span>A clean settle finishes and
+  half your roster sits at <code>state=unpaid</code>. What does that
+  mean?</div>
+  <div class="quiz-choices">
+    <button data-key="normal">Normal, they need links</button>
+    <button data-key="broken">Broken, the settle failed</button>
+    <button data-key="dangling">Dangling, retry each one</button>
+    <button data-key="refunded">Refunded, money went back</button>
+  </div>
+  <div class="quiz-fb" data-key="normal"><span class="verdict">Right</span>
+    — <code>unpaid</code> is the normal resting state for anyone without a
+    saved card (or a card that declined off-session). It means "the link is
+    the path," not "something broke." Text them.</div>
+  <div class="quiz-fb" data-key="broken"><span class="verdict">No</span>
+    — nothing failed. Cardless attendees are <em>expected</em> to land here;
+    the system did exactly what it promised.</div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">No</span>
+    — dangling is <code>state=none</code> with a stamp. These rows
+    <em>resolved</em> to <code>unpaid</code>; retry would refuse them.</div>
+  <div class="quiz-fb" data-key="refunded"><span class="verdict">No</span>
+    — refunded reverses a <em>collected</em> charge. These were never
+    collected; there's nothing to give back.</div>
+</div>
+
+</section>
+
+<h2>How you did</h2>
+
+<p>Missed one? That's the signal for where to look. Roughly:</p>
+
+<table class="ref">
+<tbody>
+<tr><td>1, 3, 5, 7</td><td>Reading the row —
+    <a href="0001-read-the-payment-row.html">Lesson 1</a> +
+    <a href="../reference/payment-row.html">the field guide</a>.</td></tr>
+<tr><td>2, 4, 6</td><td>Where the money goes —
+    <a href="0002-where-the-money-actually-goes.html">Lesson 2</a>.</td></tr>
+</tbody>
+</table>
+
+<p>If two or more of the same group slipped, re-read that lesson before we
+build the next one — the queued
+<a href="../reference/codebase-map.html#path">transactions lesson</a>
+assumes both of these are solid.</p>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Tell me which ones you missed and why they felt wrong — that's better
+  signal for the next lesson than a clean sweep. And if any explanation
+  above didn't land, say so; I'll rebuild it.
+</div>
+
+<div class="footer">
+  <p><a href="0002-where-the-money-actually-goes.html">← Lesson 2</a> ·
+     <a href="0003-the-shape-of-the-codebase.html">Lesson 3 →</a> ·
+     <a href="../reference/codebase-map.html">The map</a> ·
+     <a href="../MISSION.md">Mission</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

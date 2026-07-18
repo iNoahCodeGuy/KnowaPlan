@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 3 — The shape of the codebase</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>The shape of the codebase</h1>
+<p class="subtitle">Lesson 3 · ~10 minutes · Twelve files, four
+layers, and one rule about who may write what</p>
+
+<p>You asked what you need to know about this codebase. The full
+answer is now a reference —
+<a href="../reference/codebase-map.html"><strong>the KnowaPlan
+map</strong></a>, which includes the whole learning path — but the
+map only works if you can read its skeleton. That skeleton is this
+lesson: <em>which file is allowed to do what, and why the invariants
+you grilled depend on it</em>.</p>
+
+<p>Here's the claim to test everything against: <strong>your
+decisions are enforced by placement.</strong> Record-first,
+table-checked transitions, capability URLs — none of these survive
+because everyone is careful. They survive because the code that
+could violate them isn't allowed to live where the violation would
+happen.</p>
+
+<h2>The four layers</h2>
+
+<pre><code>  EDGE      web.py + templates, main.py     token → row, form → service
+  SERVICES  rsvps.py, events.py,            flow, state writes, COMMITS
+            settlement.py
+  MONEY     payments.py                     the only file that calls Stripe
+  MEMORY    models.py                       rows remember
+  LAW       state_machines.py               tables legislate
+            ── plumbing: db.py, config.py, bootstrap.py ──</code></pre>
+
+<p>Four placement rules, each carrying a decision you already own:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><strong>Law is data, not code.</strong></td>
+    <td><a href="../app/state_machines.py">state_machines.py</a> is
+    your transition tables, transcribed — no behavior, terminal
+    states map to the empty set. Services <em>consult</em> it via
+    <code>can_transition()</code>; nothing else decides legality. An
+    illegal move is a loud <code>ValueError</code>, never a silent
+    write.</td></tr>
+<tr><td><strong>Only services assign state.</strong></td>
+    <td><code>rsvp.state = …</code> appears in
+    <a href="../app/rsvps.py">rsvps.py</a>,
+    <a href="../app/events.py">events.py</a>,
+    <a href="../app/settlement.py">settlement.py</a> (and
+    payments.py for the Payment machine) — always behind a table
+    check. It appears in <a href="../app/web.py">web.py</a>
+    <em>zero times</em>. I verified that today, mechanically. A
+    route cannot typo a transition, because a route never writes
+    one.</td></tr>
+<tr><td><strong>Only payments.py talks to Stripe — and it never
+    commits.</strong></td>
+    <td>It mutates rows in memory and makes the API call; the
+    <em>caller</em> owns the transaction. This is record-first,
+    load-bearing: your 2026-07-13 decision needs intent committed
+    BEFORE the Stripe call and the terminal state after — so the
+    commit points must belong to the choreographer
+    (settlement.py), not to the code standing next to Stripe.
+    (settlement.py does <code>import stripe</code> — but only to
+    <em>catch</em> its error types, never to call it.)</td></tr>
+<tr><td><strong>The edge translates; it doesn't decide.</strong></td>
+    <td>web.py turns a token into a row — each helper queries ONLY
+    its own column, which is why an /e/ link can never act as an
+    /admin/ link — parses the form, calls a service, renders a
+    template. Even the buttons it renders come from
+    <code>allowed_choices()</code>, so the UI physically can't
+    offer an illegal move.</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <span class="label">Why placement beats discipline</span>
+  Suppose a future you, at midnight, adds a route that sets
+  <code>payment.state = "paid"</code> directly. Nothing about Python
+  stops you. But the review diff shows a state write in web.py —
+  a <em>category</em> error, visible without reading a single line of
+  logic. Layering turns subtle bugs into obvious ones. That's the
+  whole trick, and it's why "where does this code go?" is a
+  correctness question here, not a style question.
+</div>
+
+<h2>One tap to one charge</h2>
+
+<p>Trace the two writes that matter. Wednesday night, event open;
+Marcus taps <em>Going</em>:</p>
+
+<pre><code>POST /r/{token}/respond
+  web.py      finds the Rsvp by rsvp_token (that column only)
+  rsvps.py    respond(): event still open? choice a response state?
+              can_transition(RSVP, "pending", "going")?  → rsvp.state = "going"
+              session.commit()                            ONE write, done</code></pre>
+
+<p>Thursday, after the game, the planner settles. This is the same
+shape — edge → service → money — but now the service's commit
+choreography <em>is</em> the safety mechanism:</p>
+
+<pre><code>POST /admin/{token}/settle
+  web.py         finds the Event by admin_token; success_url from request.base_url
+  settlement.py  settle_event():
+                   close if open (table-checked) → floor(total ÷ present)
+                   skip the planner (divisor, never a charge)
+                   COMMIT #1  Payment row + charge_requested_at
+                              + charge_requested_cents        ← intent is durable
+  payments.py      charge_share(): refuses a missing stamp or
+                   drifted amount → Stripe PI, key "{id}:charge"
+                   → succeeded: state = "paid" (in memory)
+  settlement.py    COMMIT #2  terminal state                  ← outcome recorded</code></pre>
+
+<p>Now the crash story you designed reads directly off the layout: a
+crash between COMMIT #1 and COMMIT #2 leaves stamp-set,
+state-<code>none</code> — the dangling row you learned to spot in
+<a href="0001-read-the-payment-row.html">Lesson 1</a> — and
+<code>retry_dangling</code> replays the stamped amount under the
+same idempotency key. One attendee's decline or API error is caught
+in settlement.py's loop, so the rest of the group still settles.</p>
+
+<h2>The plumbing, in three sentences</h2>
+
+<p><a href="../app/db.py">db.py</a> hands every request its own
+database session and closes it after — FastAPI's
+<a href="https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/">dependency-with-yield</a>
+pattern, verbatim. It sets <code>expire_on_commit=False</code>
+because, per the
+<a href="https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html">SQLAlchemy
+asyncio docs</a>, that's what lets code touch an object's attributes
+after a commit without triggering hidden IO — forbidden in async.
+<a href="../app/config.py">config.py</a> reads the environment
+(lazily, so tests can rig it), and
+<a href="../app/bootstrap.py">bootstrap.py</a> creates tables only
+when you explicitly run it — your 2026-07-16 decision that schema
+changes are a command, never startup magic.</p>
+
+<h2>Check yourself</h2>
+
+<p class="note">Retrieval, not recognition — answer before you tap.</p>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="sm">
+  <div class="quiz-stem"><span class="n">1</span>Marcus taps Going.
+  Exactly one file <em>defines</em> whether pending → going is a
+  legal move. Which?</div>
+  <div class="quiz-choices">
+    <button data-key="sm">state_machines.py</button>
+    <button data-key="rsvps">rsvps.py</button>
+    <button data-key="web">web.py</button>
+    <button data-key="models">models.py</button>
+  </div>
+  <div class="quiz-fb" data-key="sm"><span class="verdict">Right</span>
+    — the table <em>defines</em> legality; rsvps.py merely
+    <em>consults</em> it. That split is why the doc, the code table,
+    and the test matrix can be diffed against each other — one
+    source of law, in data.</div>
+  <div class="quiz-fb" data-key="rsvps"><span class="verdict">Close,
+    and the distinction matters</span> — rsvps.py <em>enforces</em>
+    the check, but it defines nothing: it asks
+    <code>can_transition(RSVP, …)</code>. If you edited rsvps.py to
+    allow a new move without touching the table, the table would
+    still refuse it.</div>
+  <div class="quiz-fb" data-key="web"><span class="verdict">No</span>
+    — web.py can't even <em>write</em> a state, let alone define one.
+    It renders the buttons <code>allowed_choices()</code> hands it.</div>
+  <div class="quiz-fb" data-key="models"><span class="verdict">No</span>
+    — models.py stores whatever string it's given. The DB stores
+    state; it does not enforce transitions — that's the models.py
+    docstring, verbatim.</div>
+</div>
+
+<div class="quiz-q" data-answer="rsvps">
+  <div class="quiz-stem"><span class="n">2</span>You're adding a
+  feature that must write <code>rsvp.state = "declined"</code>. In
+  which file does that assignment belong?</div>
+  <div class="quiz-choices">
+    <button data-key="rsvps">rsvps.py</button>
+    <button data-key="web">web.py</button>
+    <button data-key="sm">state_machines.py</button>
+    <button data-key="models">models.py</button>
+  </div>
+  <div class="quiz-fb" data-key="rsvps"><span class="verdict">Right</span>
+    — a service, behind a table check, owning its commit. If the
+    write is settle-time (a default resolution), settlement.py; but
+    never the other two.</div>
+  <div class="quiz-fb" data-key="web"><span class="verdict">No — and
+    this is the midnight trap</span> — it would <em>work</em>, and
+    the diff would show a state write at the edge: a category error
+    every reviewer catches without reading your logic. Placement is
+    the review.</div>
+  <div class="quiz-fb" data-key="sm"><span class="verdict">No</span>
+    — the law layer holds tables, not behavior. If the move itself
+    is new, you'd <em>also</em> touch the table (doc first — the doc
+    wins), but the assignment never lives there.</div>
+  <div class="quiz-fb" data-key="models"><span class="verdict">No</span>
+    — models declare columns. Putting writes in the model layer
+    would hide transitions from exactly the review that's supposed
+    to catch them.</div>
+</div>
+
+<div class="quiz-q" data-answer="settlement">
+  <div class="quiz-stem"><span class="n">3</span><code>charge_share</code>
+  just returned: <code>payment.state</code> is now
+  <code>"paid"</code> — in memory. Whose code commits it?</div>
+  <div class="quiz-choices">
+    <button data-key="settlement">settlement.py</button>
+    <button data-key="payments">payments.py</button>
+    <button data-key="db">db.py</button>
+    <button data-key="web">web.py</button>
+  </div>
+  <div class="quiz-fb" data-key="settlement"><span class="verdict">Right</span>
+    — the choreographer owns both commit points: intent before the
+    Stripe call, outcome after. That ordering IS record-first; give
+    payments.py a commit and the ordering becomes a convention
+    instead of a structure.</div>
+  <div class="quiz-fb" data-key="payments"><span class="verdict">No —
+    by design</span> — payments.py never commits. If it did, a
+    future edit could commit <em>before</em> Stripe answered or slip
+    a second write between stamp and call, and record-first would
+    depend on everyone remembering not to.</div>
+  <div class="quiz-fb" data-key="db"><span class="verdict">No</span>
+    — db.py mints sessions; it never decides when one commits.
+    Plumbing, not policy.</div>
+  <div class="quiz-fb" data-key="web"><span class="verdict">No</span>
+    — web.py commits only bookkeeping (a saved Stripe id, a polled
+    link). Money-path commits live with the money choreography it
+    delegates to.</div>
+</div>
+
+<div class="quiz-q" data-answer="docker">
+  <div class="quiz-stem"><span class="n">4</span>Deployed to Railway.
+  Every share link the roster prints reads
+  <code>http://internal-host/e/…</code> instead of your public
+  https domain. Which file do you check first?</div>
+  <div class="quiz-choices">
+    <button data-key="docker">Dockerfile</button>
+    <button data-key="config">config.py</button>
+    <button data-key="web">web.py</button>
+    <button data-key="main">main.py</button>
+  </div>
+  <div class="quiz-fb" data-key="docker"><span class="verdict">Right</span>
+    — links come from <code>request.base_url</code>, which only
+    honors the proxy's X-Forwarded-Proto/Host when uvicorn runs with
+    <code>--proxy-headers --forwarded-allow-ips</code>. Those flags
+    live in the CMD line, and the Dockerfile comment calls them
+    load-bearing for exactly this failure.</div>
+  <div class="quiz-fb" data-key="config"><span class="verdict">No —
+    deliberately</span> — there is no BASE_URL setting to misread.
+    You rejected one on 2026-07-16: a deploy that forgets an env var
+    mints wrong links <em>silently</em>, while deriving from the
+    request can only break loudly and consistently. The fix lives
+    where the proxy is handled.</div>
+  <div class="quiz-fb" data-key="web"><span class="verdict">Reasonable
+    — but second</span> — web.py builds links from
+    <code>request.base_url</code> and that code is fine; it faithfully
+    reports what the server believes its origin is. The belief is
+    wrong because the proxy headers are being ignored upstream.</div>
+  <div class="quiz-fb" data-key="main"><span class="verdict">No</span>
+    — main.py assembles the app; it never sees the proxy. The
+    hostname story is decided by how uvicorn is <em>launched</em>.</div>
+</div>
+
+</section>
+
+<h2>What this buys you tomorrow</h2>
+
+<p>Every queued lesson on the
+<a href="../reference/codebase-map.html#path">map's learning path</a>
+is one box of this diagram opened up: transactions and record-first
+(the SERVICES layer's commit machinery), async (what all those
+<code>await</code>s buy), the web layer (EDGE), settle_event line by
+line. When you review a diff between now and 7/29, start with the
+placement question — <em>is this code in the file that's allowed to
+do this?</em> — before you read a single line of logic.</p>
+
+<div class="sourcebox">
+  <span class="label">Read next — primary source</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="https://fastapi.tiangolo.com/tutorial/bigger-applications/"><strong>Bigger
+  Applications — Multiple Files</strong></a> — FastAPI (official)</p>
+  <p style="margin:0;font-size:.87rem">Ten minutes. This is the
+  documented pattern main.py and web.py implement: routes defined on
+  an <code>APIRouter</code>, mounted with
+  <code>app.include_router()</code> — "it will include all the
+  routes from that router as part of it." Reading it, you'll
+  recognize your own entrypoint — and see what the pattern offers
+  (prefixes, shared dependencies) that this codebase deliberately
+  doesn't use yet.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Good ones for right now: <em>"why is settlement.py allowed to
+  <code>import stripe</code> if only payments.py may call it?"</em> ·
+  <em>"what exactly would go wrong if payments.py committed?"</em> ·
+  <em>"web.py commits after poll_link_status — doesn't that break
+  the rule?"</em> That last one has a real answer worth hearing.
+</div>
+
+<div class="footer">
+  <p><strong>Verification note.</strong> The claims here were checked
+  against the code today (2026-07-17): zero state assignments in
+  web.py (grepped), zero commits in payments.py, and both FastAPI
+  and SQLAlchemy citations fetched and quoted from the current
+  official docs.</p>
+  <p><a href="0002-where-the-money-actually-goes.html">← Lesson 2</a> ·
+     <a href="../reference/codebase-map.html">The map</a> ·
+     <a href="../MISSION.md">Mission</a> ·
+     <a href="../RESOURCES.md">Resources</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

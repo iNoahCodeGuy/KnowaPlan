@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The KnowaPlan map — what a developer needs to know</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+
+<h1>The KnowaPlan map</h1>
+<p class="subtitle">Reference · what a developer needs to know ·
+grounded in the code as of 2026-07-17</p>
+
+<p>KnowaPlan splits a fixed cost (a pickleball court) across whoever
+actually shows up. Attendees RSVP through capability URLs — no
+accounts — and optionally save a card; at close the planner marks
+attendance and each present attendee's true share is charged from
+their saved card or collected via a tap-to-pay link. No holds, no
+webhooks, no background jobs in v0. It custodies real money, so
+correctness beats speed everywhere.</p>
+
+<h2 id="layers">The four layers and the one rule</h2>
+
+<pre><code>  browser (form POST, one JS island on /r/)
+      │
+  ┌───▼──────────────────────────────────────────────┐
+  │ EDGE      app/web.py + templates/   app/main.py  │  token → row,
+  │           (926 lines, every route)               │  form → service
+  ├───▼──────────────────────────────────────────────┤
+  │ SERVICES  app/rsvps.py  app/events.py            │  the ONLY place
+  │           app/settlement.py                      │  business flow +
+  │                                                  │  commits live
+  ├───▼──────────────────────────────────────────────┤
+  │ MONEY     app/payments.py                        │  the ONLY file
+  │                                  ──► Stripe API  │  that calls Stripe
+  ├───▼──────────────────────────────────────────────┤
+  │ MEMORY    app/models.py          ──► Postgres    │  rows remember;
+  │ LAW       app/state_machines.py                  │  tables legislate
+  └──────────────────────────────────────────────────┘
+    plumbing: app/db.py  app/config.py  app/bootstrap.py</code></pre>
+
+<div class="callout">
+  <span class="label">The one rule that makes the invariants enforceable</span>
+  Every state-machine column is assigned only after a
+  <code>can_transition()</code> check — in services and in
+  <code>payments.py</code>, never in <code>web.py</code>. And
+  <code>payments.py</code> never commits: it mutates rows in memory
+  and talks to Stripe; <strong>the caller owns the transaction</strong>.
+  That split is what makes record-first possible — the commit points
+  are chosen by the choreographer (<code>settlement.py</code>), not by
+  the code that moves money.
+</div>
+
+<h2 id="files">Every file, one line</h2>
+
+<table class="ref">
+<tbody>
+<tr><td><a href="../app/main.py">main.py</a></td>
+    <td>Assembles the app: includes the router, global error page
+    (copy deliberately makes no claim about money), <code>/health</code>.</td></tr>
+<tr><td><a href="../app/web.py">web.py</a></td>
+    <td>All routes + Jinja2 templates. Looks up each token in its own
+    column only, parses forms, delegates to services, renders. Never
+    assigns a state column. Its own commits: row creation and
+    Stripe-id bookkeeping (after a card save or link poll).</td></tr>
+<tr><td><a href="../app/rsvps.py">rsvps.py</a></td>
+    <td>RSVP service: <code>get_or_create_rsvp</code> (the /e/ entry —
+    find-or-create by phone, mints the /r/ token, auto-links a playing
+    planner), <code>respond</code>, <code>allowed_choices</code> (UI
+    can never offer an illegal move).</td></tr>
+<tr><td><a href="../app/events.py">events.py</a></td>
+    <td>Pre-money event writes: <code>open_rsvps</code> (draft→open),
+    <code>cancel_event</code> — refuses if ANY Payment row left
+    pristine <code>none</code> (a crashed settle may have moved money).</td></tr>
+<tr><td><a href="../app/settlement.py">settlement.py</a></td>
+    <td>The record-first choreographer: <code>mark_attendance</code>,
+    <code>close_rsvps</code>, <code>settle_event</code> (close → floor
+    split → skip planner → stamp intent in ONE commit → charge/link
+    per attendee, failures contained per attendee),
+    <code>retry_dangling</code> (stamped amount, same idempotency key).</td></tr>
+<tr><td><a href="../app/payments.py">payments.py</a></td>
+    <td>The only Stripe call surface: save card (SetupIntent),
+    <code>charge_share</code> (off-session PI, fires from
+    <code>none</code> only), <code>create_payment_link</code> /
+    <code>poll_link_status</code> (Checkout Session, one payable link
+    per row), <code>refund_charge</code> — a guarded stub until
+    walk-ins ship.</td></tr>
+<tr><td><a href="../app/models.py">models.py</a></td>
+    <td>Five tables: Planner, Attendee, Event, Rsvp, Payment. Tokens
+    minted by column default (an insert cannot forget). The DB stores
+    state; it does not enforce transitions.</td></tr>
+<tr><td><a href="../app/state_machines.py">state_machines.py</a></td>
+    <td>Pure data — the transition tables transcribed from
+    state_machines.md, plus <code>can_transition()</code>. No behavior.
+    On disagreement, the doc wins.</td></tr>
+<tr><td><a href="../app/db.py">db.py</a></td>
+    <td>Lazy async engine (import never needs a DB),
+    <code>pool_pre_ping</code> for Railway's idle reaping,
+    <code>get_session</code> — one session per request via FastAPI's
+    dependency-with-yield; <code>expire_on_commit=False</code> because
+    async forbids the implicit IO that attribute expiry would trigger.</td></tr>
+<tr><td><a href="../app/config.py">config.py</a></td>
+    <td>pydantic-settings; env beats .env. Normalizes any
+    <code>postgres://</code> URL onto the asyncpg driver so a managed
+    host's variable pastes verbatim.</td></tr>
+<tr><td><a href="../app/bootstrap.py">bootstrap.py</a></td>
+    <td><code>create_all</code>, run explicitly — never at startup. It
+    only ADDs tables: after a model change, drop/recreate the dev DB.
+    Alembic arrives at live dogfood.</td></tr>
+<tr><td>.claude/hooks/money_guard.py</td>
+    <td>Enforced (not advisory) guard: denies any .py edit using the
+    Refund API without the <code>refund-guard: captured-only</code>
+    marker. Fails closed; pinned by tests/test_money_guard.py.</td></tr>
+</tbody>
+</table>
+
+<h2 id="urls">The URLs, grouped by credential</h2>
+
+<p>Three capability tokens, one per purpose, each route querying ONLY
+its own column — cross-purpose reuse is structurally impossible.</p>
+
+<table class="ref">
+<tbody>
+<tr><td><strong>no token</strong></td>
+    <td><code>GET /</code> create form · <code>POST /events</code>
+    (CREATE_PASSWORD gate, fail closed) · <code>GET /paid</code>
+    (Checkout landing) · <code>GET /health</code></td></tr>
+<tr><td><strong>/e/{event_token}</strong><br>texted to the group</td>
+    <td>view event · <code>POST …/rsvp</code> starts an RSVP by name +
+    phone (re-entering a known phone recovers a lost /r/ link)</td></tr>
+<tr><td><strong>/r/{rsvp_token}</strong><br>per attendee <em>per event</em></td>
+    <td>answer page (buttons derived from the transition table) ·
+    <code>POST …/respond</code> · <code>POST …/setup-intent</code>
+    (lazy Payment Element island — card save is optional)</td></tr>
+<tr><td><strong>/admin/{admin_token}</strong><br>whoever holds it IS the planner</td>
+    <td>roster (polls outstanding links on load) · open · close ·
+    attendance · settle preview/settle (mode explicit: actual, or cap
+    shown only when actual &gt; estimate) · cancel · retry dangling ·
+    fresh link</td></tr>
+</tbody>
+</table>
+
+<h2 id="machines">The four state machines</h2>
+
+<table class="ref">
+<tbody>
+<tr><td>Event</td><td>draft → open → closed → settled → archived;
+    open|closed → cancelled. Close is manual or settle-triggered —
+    never tied to start time.</td></tr>
+<tr><td>RSVP</td><td>pending → going|maybe|declined; maybe →
+    going|declined; declined → going (while open); going →
+    attended|no_show (planner's writes).</td></tr>
+<tr><td>Payment</td><td>none → paid | unpaid; unpaid → paid |
+    abandoned; paid → refunded. No holds — <code>authorized</code>,
+    <code>voided</code>, <code>auth_failed</code> died with the
+    2026-07-15 pivot.</td></tr>
+<tr><td>Attendance</td><td>unconfirmed → present | absent, resolved at
+    settlement. Lives on the Rsvp row (same grain).</td></tr>
+</tbody>
+</table>
+
+<h2 id="invariants">Money invariants — the review checklist</h2>
+
+<p>Given a diff to the money path, check it against these. Each traces
+to a <a href="../decisions.md">decisions.md</a> entry.</p>
+
+<table class="ref">
+<tbody>
+<tr><td>Integer cents</td><td>All amounts. Never float. (<code>bool</code>
+    is rejected too — <code>True</code> must not read as 1¢.)</td></tr>
+<tr><td>Record-first</td><td>ONE commit writes the attendance change +
+    <code>charge_requested_at</code> + <code>charge_requested_cents</code>
+    BEFORE the Stripe call; terminal state after. The DB always knows
+    at least as much as Stripe. (2026-07-13, -16)</td></tr>
+<tr><td>Idempotency keys</td><td>Derived from (payment.id, operation) —
+    <code>"{id}:charge"</code>. Retry = same key, same params. New
+    attempt = new row, fresh key by construction. (2026-07-08)</td></tr>
+<tr><td>Charge from <code>none</code> only</td><td>After a decline
+    (<code>unpaid</code>), the tap-to-pay link is the ONLY recovery —
+    a saved card is never re-fired for that row. (2026-07-16)</td></tr>
+<tr><td>One payable link per row</td><td>Re-minting retires the old
+    session first — refuse if it already collected. Links are shown
+    once, never stored beyond the session id. (2026-07-16)</td></tr>
+<tr><td>Table-checked writes</td><td>Every state assignment passes
+    <code>can_transition()</code> — an illegal move raises, never
+    silently writes.</td></tr>
+<tr><td>Planner is a divisor, never a charge</td><td>Counts in
+    floor(total ÷ present); no Payment row exists for them. (2026-07-16)</td></tr>
+<tr><td>Default charges actual</td><td>Cap-and-absorb (at the frozen
+    estimate snapshot) is an active planner choice; silence never
+    absorbs. (2026-07-15, -16)</td></tr>
+<tr><td>Refund = reversal of collected money, only</td><td>Enforced by
+    the money_guard hook, not prose. Stub until walk-ins.</td></tr>
+</tbody>
+</table>
+
+<h2 id="docs">The docs are part of the architecture</h2>
+
+<p>Read these before an architectural change; if a change would
+contradict one, stop and align (CLAUDE.md).</p>
+
+<table class="ref">
+<tbody>
+<tr><td><a href="../CLAUDE.md">CLAUDE.md</a></td><td>How to work here:
+    money rules, commands, the align-before-acting owner instruction.</td></tr>
+<tr><td><a href="../decisions.md">decisions.md</a></td><td>Append-only
+    WHY. The 2026-07-15 pivot entry is the money model; later entries
+    refine it. Newer wins on conflict.</td></tr>
+<tr><td><a href="../state_machines.md">state_machines.md</a></td>
+    <td>The law, prose form. Beats the code table on disagreement.</td></tr>
+<tr><td><a href="../scenarios.md">scenarios.md</a></td><td>User-facing
+    edge-case contracts. ⚠ Currently states a false fee bound — see
+    open items below.</td></tr>
+<tr><td><a href="../demo.md">demo.md</a></td><td>Test-mode walk of the
+    whole slice + the live-flip procedure.</td></tr>
+<tr><td><a href="../runbook.md">runbook.md</a></td><td>Day-of crib
+    sheet for 7/29, written for a phone at the court.</td></tr>
+</tbody>
+</table>
+
+<h2 id="deploy">Deployment</h2>
+
+<table class="ref">
+<tbody>
+<tr><td>Image</td><td><a href="../Dockerfile">Dockerfile</a>:
+    python:3.12-slim, pip install, copy <code>app/</code>, run
+    uvicorn on <code>$PORT</code>. Host: Railway, with managed
+    Postgres.</td></tr>
+<tr><td>Load-bearing flags</td><td><code>--proxy-headers
+    --forwarded-allow-ips '*'</code> make <code>request.base_url</code>
+    honor X-Forwarded-Proto/Host behind Railway's proxy. Without them
+    every share link and Checkout success_url the app prints is an
+    internal http:// hostname.</td></tr>
+<tr><td>Env vars</td><td><code>DATABASE_URL</code> (any postgres://
+    form — normalized to asyncpg) · <code>STRIPE_SECRET_KEY</code> ·
+    <code>STRIPE_PUBLISHABLE_KEY</code> (browser island) ·
+    <code>PLANNER_ACCOUNT_ID</code> (the CONNECTED account that
+    receives money — never the platform's own id) ·
+    <code>CREATE_PASSWORD</code> (unset = event creation refused).</td></tr>
+<tr><td>Schema</td><td><code>python -m app.bootstrap</code> once per
+    fresh DB. It cannot ALTER — model change = drop/recreate (dev) or
+    hand-ALTER (deployed, until Alembic).</td></tr>
+<tr><td>Runtime lesson</td><td>stripe's <code>*_async</code> methods
+    need httpx at RUNTIME — it was dev-only once, the image lacked
+    it, every deployed Stripe call 500'd (found 2026-07-16). Pinned
+    in requirements.txt.</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <span class="label">The operational fact that explains everything</span>
+  There are no webhooks, no schedulers, no background jobs.
+  <strong>Nothing happens unless a request happens.</strong> Payments
+  land on the roster because loading the roster polls outstanding
+  links; auto-settle and the maybe→declined timer are deferred with
+  the scheduler; settlement runs when the planner taps Settle. If a
+  state looks stale, the question is "which request would have
+  refreshed it?"
+</div>
+
+<h2 id="tests">Testing</h2>
+
+<table class="ref">
+<tbody>
+<tr><td>Boundary</td><td>Never the live Stripe API — conftest injects
+    <code>mock_stripe</code>. Transactions are pinned against
+    in-memory SQLite (aiosqlite): real commits, still hermetic.</td></tr>
+<tr><td>Pinning tests</td><td>test_state_machines.py (full transition
+    matrix) · test_payments.py (exact-kwarg contracts) ·
+    test_money_guard.py (the hook fails closed) · test_settle_web.py
+    (settle outcomes incl. mint-failure labeling).</td></tr>
+<tr><td>Known blind spots</td><td>Mocks can't see fees (Lesson 2's
+    $3.51 discovery) and SQLite ignores VARCHAR widths (the 64-char
+    overflow, 2026-07-16). Both burned once already: anything
+    account-shaped or Postgres-shaped must be verified against the
+    real thing, deliberately.</td></tr>
+</tbody>
+</table>
+
+<h2 id="workflow">Adding a feature here</h2>
+
+<ol>
+<li>Read the canonical docs for the territory you're touching; a
+    contradiction means stop and align, not code around it.</li>
+<li><strong>Align before acting</strong> (owner rule, 2026-07-16):
+    every shaping decision — behavior, schema, names, defaults,
+    wording — is put to the owner with a recommendation BEFORE files
+    change. Money and state-machine code: mechanism explained, owner
+    reviews or writes the body.</li>
+<li>Route in web.py (token lookup → parse → delegate → render); flow
+    and state writes in a service behind <code>can_transition</code>;
+    Stripe calls in payments.py with a (payment.id, operation) key;
+    columns in models.py (then drop/recreate the dev DB).</li>
+<li>Pin behavior in tests (mock Stripe); run
+    <code>.venv/bin/pytest</code> and <code>ruff check</code>.</li>
+<li>Record any decision made in decisions.md — append-only, with
+    alternatives and why.</li>
+</ol>
+
+<h2 id="path">The learning path</h2>
+
+<p>✓ done · → current · queued in rough order. Each becomes a lesson.</p>
+
+<table class="ref">
+<tbody>
+<tr><td>✓</td><td>Reading a Payment row — states, stamps, dangling,
+    recovery paths. <a href="../lessons/0001-read-the-payment-row.html">Lesson 1</a>
+    + <a href="payment-row.html">field guide</a>; verified by
+    learning-records/0002.</td></tr>
+<tr><td>✓</td><td>Where the money actually goes — destination charges,
+    the fee your platform eats, the false 3¢ bound.
+    <a href="../lessons/0002-where-the-money-actually-goes.html">Lesson 2</a>.</td></tr>
+<tr><td>✓</td><td>The shape of the codebase — layers, who may write
+    what, one tap to one charge.
+    <a href="../lessons/0003-the-shape-of-the-codebase.html">Lesson 3</a>
+    + this map. Quiz 2/4 — the two misses named the concept→code
+    seam (learning-records/0005).</td></tr>
+<tr><td>✓</td><td>Interleaved review of 1 &amp; 2 —
+    <a href="../lessons/0004-review-lessons-1-and-2.html">review
+    quiz</a>, 6/7; sole miss localized the seam
+    (learning-records/0004).</td></tr>
+<tr><td>✓</td><td>Follow one $30 through the code — who commits,
+    where the fee escapes, the seam closed in situ.
+    <a href="../lessons/0005-follow-one-charge-through-the-code.html">Lesson 4</a>.
+    Quiz unverified.</td></tr>
+<tr><td>✓</td><td>Transactions &amp; record-first mechanics — what a
+    commit actually guarantees, why Stripe can't be inside one, the
+    crash choreography you decided.
+    <a href="../lessons/0006-why-the-stamp-and-the-state-cant-be-one-write.html">Lesson 5</a>.
+    Quiz unverified.</td></tr>
+<tr><td>·</td><td>async/await — what the keywords buy, anchored to the
+    off-session charge and the roster poll.</td></tr>
+<tr><td>·</td><td>The web layer in code — capability lookups, the /r/
+    island's SetupIntent handshake, settle preview math.</td></tr>
+<tr><td>→</td><td>settle_event, line by line — per-attendee failure
+    containment, the planner skip, dangling vs unpaid labeling.</td></tr>
+<tr><td>·</td><td>Deployment &amp; the live flip — demo.md's flip,
+    runbook drill, what each env var breaks when wrong.</td></tr>
+<tr><td>·</td><td>Testing the money path — where the mock boundary
+    sits and what it structurally cannot see.</td></tr>
+<tr><td>·</td><td>Authoring walk-ins &amp; refunds — the next
+    milestone, written by you: refund_charge, re-splits, the
+    money_guard marker.</td></tr>
+</tbody>
+</table>
+
+<h2 id="open">Known open items (owner decisions, not lessons)</h2>
+
+<table class="ref">
+<tbody>
+<tr><td>Stripe-fee gross-up</td><td>Direction chosen ("attendees cover
+    it"); six shaping calls await confirm/overrule. The draft formula
+    over-collects +1¢ on ~51% of shares (never under) — the honest
+    formula is the smallest charge that nets the share, pinned by a
+    make-whole-AND-minimal property test. Un-parked 2026-07-18. See
+    NOTES.md checkpoint.</td></tr>
+<tr><td>scenarios.md states a falsehood</td><td>"At most headcount − 1
+    cents" planner absorption; reality is ~$1.17 per charged attendee
+    in platform fees until the gross-up ships.</td></tr>
+<tr><td>"Connect (Standard)" naming</td><td>CLAUDE.md/decisions.md say
+    Standard; the real account is Express-equivalent
+    (<code>type: "none"</code>). Correctly configured — the docs just
+    name it wrong.</td></tr>
+</tbody>
+</table>
+
+<div class="footer">
+  <p><a href="../lessons/0003-the-shape-of-the-codebase.html">Lesson 3
+  teaches this map</a> ·
+  <a href="payment-row.html">Payment-row field guide</a> ·
+  <a href="../MISSION.md">Mission</a> ·
+  <a href="../RESOURCES.md">Resources</a></p>
+</div>
+
+</body>
+</html>

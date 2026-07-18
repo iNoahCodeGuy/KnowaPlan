@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 4 — Follow one charge through the code</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Follow one $30 through the code</h1>
+<p class="subtitle">Lesson 4 · deep read · ~12 minutes · Who commits,
+and where the fee escapes — the two things the quizzes caught</p>
+
+<p>You've missed exactly one kind of question, three times:
+<code>transfer_data</code> with no amount (Q6), who commits after
+<code>charge_share</code> (L3 Q3), the proxy flags (L3 Q4). All the
+same seam — the drop from <em>the design</em> to <em>the line that
+does it</em>. Two of those three live inside a single function. So
+we're going to read it, slowly, and trace one charge from intent to
+durable outcome. By the end, "who commits?" won't be a guess — you'll
+see that <code>charge_share</code> <strong>cannot</strong>.</p>
+
+<p class="note">Everything here is the same charge you diagnosed in
+<a href="0001-read-the-payment-row.html">Lesson 1</a> and the same
+money flow from <a href="0002-where-the-money-actually-goes.html">Lesson
+2</a> — now at the grain of the actual code. Nothing new to believe;
+a lot to <em>locate</em>.</p>
+
+<h2>The claim to hold onto</h2>
+
+<div class="callout">
+  <span class="label">One sentence, and the whole lesson proves it</span>
+  <strong>payments.py never commits. The caller
+  (settlement.py) owns the transaction.</strong> That is what makes
+  record-first a <em>structure</em> instead of a promise everyone has
+  to keep.
+</div>
+
+<h2>Beat 1 — settle_event stamps intent · COMMIT #1</h2>
+
+<p>Before a cent moves, the choreographer writes down what it's about
+to do. From <a href="../app/settlement.py">settlement.py</a>, inside
+the settle loop:</p>
+
+<pre><code>payment = Payment(
+    event_id=event.id, attendee_id=attendee.id,
+    state="none",                                 # nothing collected yet
+    charge_requested_at=datetime.now(timezone.utc),  # the stamp: WHEN
+    charge_requested_cents=charge,                # the stamp: HOW MUCH
+)
+session.add(payment)
+await session.commit()          # ← COMMIT #1 · intent is now durable</code></pre>
+
+<p>Notice the state is <code>none</code> and the two stamps are set.
+That is <em>literally</em> Row 2 from Lesson 1 — the
+<strong>dangling</strong> shape. If the process died on the very next
+line, this row would sit in the DB saying "I was about to charge $30
+and I never finished" — findable by query, retryable, safe. The
+scary row you learned to recognise is <em>manufactured on purpose,
+right here.</em></p>
+
+<p class="note">And hold this thought: <code>settle_event</code>
+<em>has</em> a <code>session</code> — it's a parameter. It is allowed
+to commit. Keep your eye on who holds the session.</p>
+
+<h2>Beat 2 — charge_share moves the money · NO commit</h2>
+
+<p>Now the call into <a href="../app/payments.py">payments.py</a>.
+Read the signature before anything else:</p>
+
+<pre><code>async def charge_share(payment, attendee, planner, actual_cents) -> Payment:</code></pre>
+
+<div class="callout">
+  <span class="label">This is the answer to L3 Q3, and it's in the signature</span>
+  <strong>There is no <code>session</code> here.</strong> A commit is
+  <code>session.commit()</code> — you can only commit a session, and
+  this function doesn't hold one. It <em>cannot</em> commit; it isn't
+  physically able to. The one file that talks to Stripe is, by its own
+  parameter list, incapable of making anything durable.
+</div>
+
+<p>So what <em>does</em> it do? It checks the stamp, calls Stripe, and
+mutates the <code>payment</code> object in memory. The guard first —
+record-first, enforced:</p>
+
+<pre><code>if payment.charge_requested_at is None:
+    raise ValueError("stamp the intent before moving money")
+if payment.charge_requested_cents != actual_cents:
+    raise ValueError("amount drifted from the stamped intent")</code></pre>
+
+<p>It refuses to charge an amount that doesn't match what COMMIT #1
+recorded — because a retry has to re-send the identical request for
+Stripe's idempotency replay to work. Then the money move:</p>
+
+<pre><code>intent = await stripe.PaymentIntent.create_async(
+    amount=actual_cents, currency="usd",
+    customer=attendee.stripe_customer_id,
+    payment_method=attendee.stripe_payment_method_id,
+    confirm=True, off_session=True,
+    on_behalf_of=planner.stripe_account_id,
+    transfer_data={"destination": planner.stripe_account_id},  # ← Q6, in situ
+    idempotency_key=f"{payment.id}:charge",
+)</code></pre>
+
+<p>There's your Q6 — <code>transfer_data</code> with a
+<code>destination</code> and <strong>no <code>amount</code></strong>,
+so the full $30 transfers out and, because it's a destination charge,
+the ~$1.17 fee is debited from your platform. One line, both facts.
+And the <code>idempotency_key</code> is the fixed
+<code>{payment.id}:charge</code> — the string that makes a retry
+replay instead of double-charge.</p>
+
+<p>Then the outcome is written <strong>to the object, in memory</strong>:</p>
+
+<pre><code># success:
+_move(payment, "paid")                    # state → paid, in memory only
+payment.charged_cents = actual_cents
+payment.stripe_payment_intent_id = intent.id
+return payment                            # ← hands the object back. No commit.
+
+# decline (stripe.CardError):
+_move(payment, "unpaid")                   # state → unpaid, in memory only
+payment.state_reason = decline_code
+return payment                            # ← still no commit.</code></pre>
+
+<p>Every write in Beat 2 is in memory. As far as the <em>database</em>
+is concerned, nothing has changed since COMMIT #1 — the row is still
+<code>state=none</code> with the stamp set. The money may have already
+moved at Stripe. The DB doesn't know yet. <strong>That gap is the
+dangling window, and you're looking at the code that opens it.</strong></p>
+
+<h2>Beat 3 — the caller commits · COMMIT #2</h2>
+
+<p>Back in <code>_collect</code> in settlement.py — the function that
+called <code>charge_share</code>:</p>
+
+<pre><code>await charge_share(payment, attendee, planner, cents)   # mutated in memory
+await session.commit()          # ← COMMIT #2 · the outcome is now durable
+if payment.state == "paid":
+    return Outcome(attendee.id, "paid")</code></pre>
+
+<p><strong>There is your L3 Q3.</strong> The commit that turns "paid"
+from an in-memory fact into a durable one lives in
+<em>settlement.py</em> — the coordinator that holds the session — not
+in payments.py. <code>charge_share</code> moved the state;
+<code>_collect</code> made it real.</p>
+
+<h2>Why it has to be split this way</h2>
+
+<p>This is the part worth owning, because it's your own record-first
+decision expressed as machinery. Record-first needs <strong>two
+commits in a guaranteed order</strong>: intent before the Stripe call
+(COMMIT #1), outcome after (COMMIT #2). The only way to guarantee an
+order between two commits is to have <em>one</em> piece of code own
+both. If <code>charge_share</code> committed its own outcome, a future
+edit could commit before Stripe answered, or slip a second write
+between the stamp and the call — and the ordering would silently rot.
+By handing payments.py no session, the order isn't a rule anyone has
+to remember. It's a fact about the code's shape.</p>
+
+<p>That's <a href="0003-the-shape-of-the-codebase.html">Lesson 3's</a>
+"placement beats discipline," at the finest possible grain:
+<strong>the safety is in the parameter list.</strong></p>
+
+<div class="callout">
+  <span class="label">The crash map — Lesson 1, now located in the code</span>
+  Where the process dies decides the row you find:
+  <table class="ref" style="margin-top:.5rem">
+  <tbody>
+  <tr><td>before COMMIT #1</td><td>no row / pristine — nothing was
+      intended</td></tr>
+  <tr><td class="hot">between #1 and #2</td><td><strong>dangling</strong>
+      (<code>state=none</code>, stamp set) — money maybe moved; press
+      Retry, same key replays the real outcome</td></tr>
+  <tr><td>after COMMIT #2</td><td><code>paid</code> or
+      <code>unpaid</code> — fully recorded, no ambiguity</td></tr>
+  </tbody>
+  </table>
+  The same table you memorised in Lesson 1 is just a map of <em>which
+  line you were on</em> when the wifi dropped.
+</div>
+
+<h2>Check yourself</h2>
+
+<p class="note">These are the seam you keep missing — code, not
+concept. Answer from what you just read, not from memory of the idea.</p>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="cannot">
+  <div class="quiz-stem"><span class="n">1</span><code>charge_share</code>'s
+  signature has no <code>session</code> parameter. What does that
+  prove?</div>
+  <div class="quiz-choices">
+    <button data-key="cannot">It cannot commit</button>
+    <button data-key="stateless">It stays fully stateless</button>
+    <button data-key="bug">It's a bug</button>
+    <button data-key="nodb">It skips Stripe</button>
+  </div>
+  <div class="quiz-fb" data-key="cannot"><span class="verdict">Right</span>
+    — a commit is <code>session.commit()</code>; with no session in
+    scope, the function is structurally unable to make anything
+    durable. Placement enforced by the parameter list.</div>
+  <div class="quiz-fb" data-key="stateless"><span class="verdict">No</span>
+    — it very much mutates state: it writes <code>state</code>,
+    <code>charged_cents</code>, and the intent id onto the
+    <code>payment</code> object. Just in memory, not committed.</div>
+  <div class="quiz-fb" data-key="bug"><span class="verdict">No</span>
+    — it's the opposite of a bug. Withholding the session is the
+    deliberate mechanism that keeps the two commits ordered.</div>
+  <div class="quiz-fb" data-key="nodb"><span class="verdict">No</span>
+    — it absolutely calls Stripe (that's the whole point). What it
+    can't do is <em>commit</em> the result.</div>
+</div>
+
+<div class="quiz-q" data-answer="dangling">
+  <div class="quiz-stem"><span class="n">2</span>Stripe returns
+  <code>succeeded</code>. The process dies on the very next line,
+  before <code>_collect</code>'s commit. What does the DB row say?</div>
+  <div class="quiz-choices">
+    <button data-key="dangling">state none, dangling</button>
+    <button data-key="paid">state paid, done</button>
+    <button data-key="unpaid">state unpaid, declined</button>
+    <button data-key="gone">no row, pristine</button>
+  </div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">Right —
+    and this is the deep one</span>
+    — the <code>paid</code> move happened in memory and was never
+    committed, so the DB still holds COMMIT #1: <code>state=none</code>,
+    stamp set. Dangling. Money <em>did</em> move at Stripe, but the DB
+    doesn't know — Retry replays the same key and the books converge.</div>
+  <div class="quiz-fb" data-key="paid"><span class="verdict">No — the
+    trap</span> — "Stripe succeeded" is not "the DB recorded it." The
+    <code>paid</code> write was in memory only; the commit that would
+    have persisted it never ran.</div>
+  <div class="quiz-fb" data-key="unpaid"><span class="verdict">No</span>
+    — nothing declined; Stripe said succeeded. And <code>unpaid</code>
+    would still need a commit to be durable anyway.</div>
+  <div class="quiz-fb" data-key="gone"><span class="verdict">No</span>
+    — the row exists and the stamp is set; COMMIT #1 already made it
+    durable. Pristine means no stamp.</div>
+</div>
+
+<div class="quiz-q" data-answer="both">
+  <div class="quiz-stem"><span class="n">3</span><code>transfer_data</code>
+  passes <code>destination</code> but no <code>amount</code>, on a
+  destination charge. What actually results?</div>
+  <div class="quiz-choices">
+    <button data-key="both">Full transfer, platform fee</button>
+    <button data-key="net">Net transfer, no fee</button>
+    <button data-key="split">Split transfer, shared fee</button>
+    <button data-key="none">No transfer, held funds</button>
+  </div>
+  <div class="quiz-fb" data-key="both"><span class="verdict">Right</span>
+    — no <code>amount</code> means "transfer all of it," so the full
+    $30 leaves; and a destination charge debits the fee from the
+    platform. Both halves, one line. That's the $33.51 from Lesson 2.</div>
+  <div class="quiz-fb" data-key="net"><span class="verdict">No</span>
+    — that's what setting <code>transfer_data.amount</code> to $28.83
+    would buy you. You pass no amount, so the full share goes and the
+    fee is a separate hit to the platform.</div>
+  <div class="quiz-fb" data-key="split"><span class="verdict">No</span>
+    — nothing splits the fee. It lands entirely on the platform; the
+    connected account pays none of it.</div>
+  <div class="quiz-fb" data-key="none"><span class="verdict">No</span>
+    — the transfer fires on success; <code>destination</code> is set.
+    It's the <code>amount</code> that's absent, not the transfer.</div>
+</div>
+
+<div class="quiz-q" data-answer="order">
+  <div class="quiz-stem"><span class="n">4</span>Why is
+  <code>charge_share</code> denied its own commit — what would break
+  if it had one?</div>
+  <div class="quiz-choices">
+    <button data-key="order">The guaranteed commit order</button>
+    <button data-key="speed">The request would slow</button>
+    <button data-key="stripe">Stripe forbids nested commits</button>
+    <button data-key="async">Async disallows two commits</button>
+  </div>
+  <div class="quiz-fb" data-key="order"><span class="verdict">Right</span>
+    — record-first needs intent committed <em>before</em> the Stripe
+    call and outcome <em>after</em>, in that order. Only one coordinator
+    owning both commits can guarantee it. Split the commit out and the
+    ordering becomes a thing to remember, not a structure.</div>
+  <div class="quiz-fb" data-key="speed"><span class="verdict">No</span>
+    — this isn't about performance. It's about who can guarantee two
+    writes land in the right sequence around an external call.</div>
+  <div class="quiz-fb" data-key="stripe"><span class="verdict">No</span>
+    — Stripe knows nothing about your DB commits. The constraint is
+    entirely yours: the record-first ordering.</div>
+  <div class="quiz-fb" data-key="async"><span class="verdict">No</span>
+    — async is fine with many commits. The reason is ordering
+    ownership, not a language rule.</div>
+</div>
+
+</section>
+
+<h2>What you can now do</h2>
+
+<p>Point at the line that commits (settlement.py, not payments.py),
+the line that lets the fee escape (<code>transfer_data</code>, no
+amount), and the exact window a dangling row is born in (between the
+two commits). That's the concept→code seam, closed for the money
+path's core function. The one miss still open from Lesson 3 is
+<strong>Q4, deployment</strong> — the proxy flags and
+<code>request.base_url</code>; that's its own territory and gets its
+own lesson (it's queued on
+<a href="../reference/codebase-map.html#path">the map</a>).</p>
+
+<div class="sourcebox">
+  <span class="label">Read next — primary source</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html"><strong>SQLAlchemy
+  2.0 — Asyncio</strong></a> — the AsyncSession section</p>
+  <p style="margin:0;font-size:.87rem">Five minutes on
+  <code>AsyncSession</code> and <code>commit()</code>. It's the
+  substrate under every "COMMIT" in this lesson — what a session is,
+  and why <code>expire_on_commit=False</code> (in
+  <a href="../app/db.py">db.py</a>) has to be set so the objects
+  <code>charge_share</code> mutated are still readable after the
+  commit.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Sharp ones for right now: <em>"if charge_share can't commit, how
+  does the object it mutated survive back to _collect?"</em> ·
+  <em>"what stops two attendees' charges from committing on top of
+  each other?"</em> · <em>"why commit twice instead of once after
+  Stripe answers?"</em> The last one is the whole ballgame.
+</div>
+
+<div class="footer">
+  <p><strong>Verification note.</strong> Every snippet is a faithful
+  (lightly condensed) transcription of
+  <a href="../app/payments.py">app/payments.py</a> and
+  <a href="../app/settlement.py">app/settlement.py</a> as of
+  2026-07-17 — comments and guard clauses trimmed for the trace, no
+  logic changed.</p>
+  <p><a href="0003-the-shape-of-the-codebase.html">← Lesson 3</a> ·
+     <a href="0006-why-the-stamp-and-the-state-cant-be-one-write.html">Lesson 5 →</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../reference/codebase-map.html">The map</a> ·
+     <a href="../MISSION.md">Mission</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

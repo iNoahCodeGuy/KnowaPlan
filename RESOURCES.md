@@ -98,9 +98,25 @@ noted — do not paper over it.
   defers here. US domestic card: 2.9% + 30¢. Confirmed empirically
   against our own account ($40 → $1.46, $32 → $1.23, both exact).
 
-## Knowledge — the stack
+## Knowledge — the stack (verified 2026-07-17)
 
-Gap. See below.
+- [FastAPI: Bigger Applications — Multiple Files](https://fastapi.tiangolo.com/tutorial/bigger-applications/)
+  The documented pattern main.py + web.py implement: routes on an
+  `APIRouter`, mounted via `app.include_router()` — "it will include
+  all the routes from that router as part of it." Use for: the
+  entrypoint's shape, and what the pattern offers (prefixes, shared
+  dependencies) that this codebase doesn't use yet.
+- [FastAPI: Dependencies with yield](https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-with-yield/)
+  db.py's `get_session` is this page verbatim: "use `yield` instead
+  of `return`," code before the yield runs before the handler, "the
+  code following the `yield` statement is executed after the
+  response." The page's own example is a database session.
+- [SQLAlchemy 2.0: Asyncio extension](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
+  `create_async_engine` / `async_sessionmaker` / `AsyncSession`, and
+  the reason db.py sets `expire_on_commit=False`: by default commit
+  expires attributes, and touching them afterward triggers implicit
+  IO — forbidden in asyncio. Use for: the transactions lesson and
+  any session-lifecycle question.
 
 ## Wisdom (Communities)
 
@@ -111,11 +127,12 @@ holds?") rather than fact lookups.
 
 ## Gaps
 
-- **SQLAlchemy 2.0 async + transactions.** Needed for Lesson 2
-  (record-first / what a commit is). Find the primary source before
-  writing it.
-- **FastAPI dependency injection + async.** Needed for the web-layer
-  lesson.
+- **Commit semantics for the record-first lesson.** The SQLAlchemy
+  asyncio page (above) covers sessions and expire_on_commit; still
+  missing a primary source on what a COMMIT *guarantees*
+  (atomicity/durability at the database) pitched right — likely the
+  PostgreSQL docs' transactions tutorial. Verify before writing the
+  transactions lesson.
 - ~~**Stripe Connect Standard onboarding / `card_payments` capability**~~
   **CLOSED 2026-07-16.** Checked the real account: `card_payments:
   active`, `charges_enabled: true`, `currently_due: []`. Not a blocker.
