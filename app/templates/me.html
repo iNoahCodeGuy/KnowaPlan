@@ -11,7 +11,7 @@
   <li class="person">
     <div class="person-head">
       <span class="person-name">{{ event.title }}</span>
-      <span class="badge">{{ rsvp.state }}</span>
+      <span class="badge">{{ rsvp.state | label }}</span>
     </div>
     <p class="person-meta">
       Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·

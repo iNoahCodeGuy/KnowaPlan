@@ -131,7 +131,8 @@ async def test_start_rsvp_happy_path(
     assert resp.headers["location"].startswith("/r/")
     page = await client.get(resp.headers["location"])
     assert "Hi Sam" in page.text
-    assert "pending" in page.text
+    # Raw enums never face attendees (2026-07-21 label map)
+    assert "not answered yet" in page.text
 
 
 async def test_start_rsvp_blank_name_400(

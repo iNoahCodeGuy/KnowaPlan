@@ -25,13 +25,14 @@
 {% endif %}
 
 <p>Hi {{ attendee.name }} — you're
-  <strong>{{ rsvp.state }}</strong>.</p>
+  <strong>{{ rsvp.state | label }}</strong>.</p>
 
 {% if event.state == "open" %}
   {% if choices %}
   <form method="post" action="/r/{{ rsvp.rsvp_token }}/respond">
     {% for c in choices %}
-    <button name="choice" value="{{ c }}">{{ c }}</button>
+    <button name="choice"
+            value="{{ c }}">{{ c | btn_label }}</button>
     {% endfor %}
   </form>
   {% else %}
@@ -123,7 +124,8 @@
   {% if event.state == "cancelled" %}
   <p>This event was cancelled. Nothing was charged.</p>
   {% else %}
-  <p>This event is {{ event.state }} — RSVPs are closed.</p>
+  <p>This event is {{ event.state | label }} —
+    RSVPs are closed.</p>
   {% endif %}
   {% if payment %}
     {% if payment.state == "paid" %}

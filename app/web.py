@@ -64,6 +64,34 @@ SETTLE_DEFAULTS = ("assume_all_attended", "mark_all_absent")
 # The planner's handles stay free text; this list is the claim's.
 CLAIM_VIAS = ("venmo", "zelle", "apple_cash", "cash", "other")
 
+# Attendee-facing wording for machine states. The admin roster
+# keeps the terse enums — the planner reads them as operator; an
+# attendee reading "no_show" about themselves is being sworn at
+# in machine.
+STATE_LABELS = {
+    "pending": "not answered yet",
+    "declined": "not going",
+    "attended": "played",
+    "no_show": "didn't play",
+    "settled": "settled up",
+    "draft": "not shared yet",
+}
+
+# Answer BUTTONS read as actions, not states.
+BUTTON_LABELS = {
+    "going": "Going",
+    "maybe": "Maybe",
+    "declined": "Can't make it",
+}
+
+
+def _label(state: str) -> str:
+    return STATE_LABELS.get(state, state)
+
+
+def _btn_label(choice: str) -> str:
+    return BUTTON_LABELS.get(choice, choice)
+
 
 def _dollars(cents: int) -> str:
     # Presentation only — money stays integer cents everywhere
@@ -72,6 +100,8 @@ def _dollars(cents: int) -> str:
 
 
 templates.env.filters["dollars"] = _dollars
+templates.env.filters["label"] = _label
+templates.env.filters["btn_label"] = _btn_label
 
 
 def parse_dollars_to_cents(raw: str) -> int:
@@ -498,6 +528,20 @@ async def rsvp_page(
         .scalars()
         .first()
     )
+    if (
+        payment is not None
+        and payment.state == "unpaid"
+        and payment.stripe_checkout_session_id is not None
+    ):
+        # Mirror of the roster's on-load poll (no webhook in v0):
+        # the payer's OWN page must not keep saying they owe after
+        # their link collected. A Stripe hiccup keeps the old copy
+        # — never a broken page.
+        try:
+            await poll_link_status(payment)
+            await session.commit()
+        except stripe.StripeError:
+            pass
     choices = (
         allowed_choices(rsvp) if event.state == "open" else ()
     )

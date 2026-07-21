@@ -34,7 +34,7 @@
 {% elif event.state == "cancelled" %}
   <p>This event was cancelled. Nothing was charged.</p>
 {% else %}
-  <p>This event is {{ event.state }} — RSVPs are closed. Talk to
-  {{ planner.name }} if something's off.</p>
+  <p>This event is {{ event.state | label }} — RSVPs are closed.
+  Talk to {{ planner.name }} if something's off.</p>
 {% endif %}
 {% endblock %}
