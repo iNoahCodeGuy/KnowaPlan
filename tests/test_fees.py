@@ -25,7 +25,6 @@ pending = pytest.mark.xfail(
 )
 
 
-@pending
 def test_fee_model_matches_recorded_ledger() -> None:
     # Real charges off the real account (RESOURCES.md, verified
     # 2026-07-16): $40.00 -> $1.46 and $32.00 -> $1.23, exact.

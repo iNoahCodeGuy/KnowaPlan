@@ -23,7 +23,8 @@ def fee_cents(charge_cents: int, pct_bps: int, fixed_cents: int) -> int:
     (charge_cents * pct_bps + 5_000) // 10_000 — then the fixed
     part on top.
     """
-    raise NotImplementedError  # owner writes the body
+    percentage = (charge_cents * pct_bps + 5_000) // 10_000
+    return percentage + fixed_cents
 
 
 def gross_up(share_cents: int, pct_bps: int, fixed_cents: int) -> int:
