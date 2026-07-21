@@ -7,6 +7,14 @@ noted — do not paper over it.
 > Trick worth knowing: Stripe serves a raw Markdown twin of every doc
 > page at `<url>.md`. Fetch that instead of the HTML when you want to
 > grep for an exact sentence.
+>
+> Operational (2026-07-21): in some sessions `docs.stripe.com` is
+> **egress-blocked** — WebFetch/curl get a proxy `403 connect_rejected`.
+> WebSearch still reaches Stripe's text (search index, not a direct
+> CONNECT), so verify exact sentences through `WebSearch` with
+> `allowed_domains: ["docs.stripe.com","stripe.com","support.stripe.com"]`
+> when a direct fetch is refused. The refund/reversal facts below were
+> confirmed that way.
 
 ## Knowledge — Stripe (primary)
 
@@ -97,6 +105,26 @@ noted — do not paper over it.
   docs.stripe.com does *not* publish Stripe's own rate; every docs page
   defers here. US domestic card: 2.9% + 30¢. Confirmed empirically
   against our own account ($40 → $1.46, $32 → $1.23, both exact).
+
+### Refunds & transfer reversals (verified 2026-07-21, via WebSearch)
+
+- [Refund and cancel payments](https://docs.stripe.com/refunds)
+  **The reverse_transfer rule** — the whole of Lesson 7. For a charge with
+  `transfer_data[destination]`: *"the destination account retains the
+  funds by default, which leaves your platform account to cover the
+  negative balance from the refund. To pull back the funds from the
+  connected account, set the `reverse_transfer` parameter to true."* So a
+  refund is only half the correction; the transfer reversal is the other
+  half, and it is NOT automatic for destination charges.
+- [Understanding fees for refunded payments](https://support.stripe.com/questions/understanding-fees-for-refunded-payments)
+  **Stripe keeps its fee on a refund** — *"payment processing, Connect,
+  and currency conversion fees from the original charge are not
+  returned."* A refunded charge always costs the platform the 2.9% + 30¢,
+  reversal or not. (Corroborates the "refunds reduce your platform's
+  balance" line already quoted from Charge types.)
+- [Create destination charges](https://docs.stripe.com/connect/destination-charges)
+  Already cited above for `on_behalf_of` vs `transfer_data.destination`;
+  also carries the refund-reversal paragraph for destination charges.
 
 ## Knowledge — the stack (verified 2026-07-17)
 

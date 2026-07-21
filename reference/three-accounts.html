@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The three accounts — field guide</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+
+<h1>The three accounts — field guide</h1>
+<p class="subtitle">Every KnowaPlan charge moves money between three
+parties. A refund touches two of them. The third is where corrections
+go wrong. Print this.</p>
+
+<div class="callout">
+  <span class="label">The one rule</span>
+  <strong>A refund makes the cardholder whole out of your platform
+  balance. It does not touch the connected account.</strong> To pull the
+  transferred money back, you must <em>reverse the transfer</em> —
+  a separate action.
+</div>
+
+<h2>Who's who</h2>
+
+<table class="ref">
+<thead>
+<tr><th>Account</th><th>Who it is</th><th>What lives here</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Cardholder</strong></td>
+  <td>The attendee</td>
+  <td>Pays the share. A refund returns money here. Always visible,
+      always works.</td>
+</tr>
+<tr>
+  <td><strong>Platform</strong></td>
+  <td><strong>You</strong> (KnowaPlan)</td>
+  <td>Charge created here → lands here first. Stripe's fee debited here.
+      Refunds paid <em>from</em> here. Goes negative
+      (<a href="../lessons/0002-where-the-money-actually-goes.html">Lesson 2</a>).</td>
+</tr>
+<tr>
+  <td><strong>Connected</strong></td>
+  <td>The planner (you, solo)</td>
+  <td>Destination of <code>transfer_data</code>. Gets the
+      <strong>full</strong> share the instant the charge succeeds. A
+      refund leaves it untouched.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>What each action touches</h2>
+
+<table class="ref">
+<thead>
+<tr><th>Action</th><th>Platform (you)</th><th>Connected</th><th>Cardholder</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Charge</strong> $X</td>
+  <td>+$X, −fee, −$X out</td>
+  <td class="hot">+$X</td>
+  <td>−$X</td>
+</tr>
+<tr>
+  <td><strong>Refund</strong> $X</td>
+  <td>−$X paid out</td>
+  <td><span class="null">untouched</span></td>
+  <td>+$X (whole)</td>
+</tr>
+<tr>
+  <td><strong>Reverse transfer</strong></td>
+  <td>+$X back</td>
+  <td class="hot">−$X → $0</td>
+  <td><span class="null">n/a</span></td>
+</tr>
+</tbody>
+</table>
+
+<p class="note">The fee never comes back. A refunded charge always costs
+you the 2.9% + 30¢, reversal or not.</p>
+
+<h2>Two facts that will fool you</h2>
+
+<div class="callout">
+  <span class="label">1 — A refund alone reads as “done”</span>
+  The cardholder is whole, the dashboard shows <em>refunded</em>, and
+  <strong>solo it nets to the same bottom line</strong> whether or not
+  you reverse. So skipping the reversal feels complete. It isn't — the
+  transferred dollars are stranded in the connected account.
+</div>
+
+<div class="callout">
+  <span class="label">2 — “Harmless” expires the moment there's a second planner</span>
+  Solo, both platform and connected are your pockets, so a stranded
+  transfer is bookkeeping. With another planner on the connected account,
+  a refund-without-reversal pays <em>your</em> refund out of the shared
+  platform while the money sits in <em>their</em> account.
+</div>
+
+<h2>The correction reflex (7/29)</h2>
+
+<p>Settlement is one-shot — no in-app re-mark
+(<a href="../decisions.md">decisions.md</a>). A wrong charge, or a
+walk-in that lowers a share after a charge landed, is corrected only in
+the dashboard:</p>
+
+<table class="ref">
+<tbody>
+<tr>
+  <td><strong>1. Refund</strong></td>
+  <td>Returns the share to the card, out of your platform balance.</td>
+</tr>
+<tr>
+  <td><strong>2. Reverse</strong></td>
+  <td>Set <code>reverse_transfer: true</code> at refund time, or reverse
+      the transfer after the fact. Pulls the money out of the connected
+      account.</td>
+</tr>
+<tr>
+  <td><strong>3. Read</strong></td>
+  <td>Confirm the transfer shows <code>reversed: true</code>. That — not
+      the refund — is what says the correction fully landed.</td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <span class="label">Does KnowaPlan know?</span>
+  No. A dashboard refund happens <em>outside</em> the app —
+  <code>refund_charge</code> is a guarded stub until walk-ins ship
+  (<a href="../reference/payment-row.html">payment-row guide</a>). The
+  Payment row will still read <code>paid</code>. Reconcile by hand until
+  the refund path is authored.
+</div>
+
+<div class="footer">
+  <p>Source of truth: Stripe
+  <a href="https://docs.stripe.com/refunds">Refund and cancel payments</a>
+  (<code>reverse_transfer</code> default; connected account “retains the
+  funds by default”) ·
+  <a href="https://support.stripe.com/questions/understanding-fees-for-refunded-payments">Fees
+  for refunded payments</a> (fees “not returned”) ·
+  <a href="https://docs.stripe.com/connect/destination-charges">Create
+  destination charges</a>.</p>
+  <p>Taught in <a href="../lessons/0009-the-third-account.html">Lesson 7 —
+  The third account</a>. If anything here is wrong, Stripe's docs win;
+  fix this sheet.</p>
+</div>
+
+</body>
+</html>

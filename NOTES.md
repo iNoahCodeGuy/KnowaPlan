@@ -228,7 +228,51 @@ at slots 4/4/4/3, the single right one at slot 1).
   When he questions a lesson's construction, measure it before
   answering — both times the measurement was worse than my guess.
 
+## Session log — 2026-07-21 (Lesson 7: the three accounts)
+
+- **Shipped Lesson 7** (lessons/0009-the-third-account.html) + a durable
+  field guide (reference/three-accounts.html). The topology
+  learning-records/0007 promoted to next: cardholder / platform /
+  connected, what a refund touches vs what a transfer reversal touches,
+  the sunk fee. Built on HIS OWN two live 7/21 charges ($1.00 saved card,
+  $1.66 link) and their real transfer ids (tr_3TvdcV…, tr_3Tve3B…, both
+  reversed: false), not Connect theory — exactly as 0007 asked.
+- **Inverted the format** per learning-records/0008: the lesson opens on
+  his broken 7/21 ledger with a "stop — what's wrong?" prompt before any
+  explanation, then teaches the mechanism. First time a lesson leads with
+  a scenario instead of the concept.
+- **The pedagogical spine** is the solo-nets-to-zero trap: solo, platform
+  −$1.33 + connected +$1.00 combine to the same −$0.33 as the reversed
+  case, so the reversal changes nothing he can see — which is *why* he
+  skipped it and reported complete in good faith (0007's strongest
+  signal, reflected back at him). The lethal case (a second planner) is
+  the $30 worked example.
+- **Verified before teaching** (the NOTES pattern; Stripe facts have
+  bitten this curriculum before): both load-bearing claims quoted from
+  Stripe's own text — refund on a destination charge does NOT reverse the
+  transfer ("the destination account retains the funds by default… set
+  the reverse_transfer parameter to true"), and Stripe keeps the fee on a
+  refund ("fees from the original charge are not returned"). Sources added
+  to RESOURCES.md.
+- **Closing action fixes his real books:** reverse the two live transfers,
+  read reversed: true. Offered to walk the exact dashboard clicks (did
+  NOT assert button labels I couldn't verify — docs.stripe.com is
+  egress-blocked this session; see RESOURCES note).
+- check_quiz.py: CONTRACT OK — words equal within each question, answer
+  slots [2,3,1,4] (no bias). **Quiz UNVERIFIED — ask for the score.** No
+  learning record written: nothing was demonstrated yet, only built
+  (LEARNING-RECORD-FORMAT: coverage ≠ learning).
+- Map updated: the → three-accounts row flipped to ✓ Lesson 7; the "two
+  transfers awaiting reversal" open item now points at the lesson's
+  action and clears when he reverses both.
+
 ## Open threads / candidate next lessons
+
+> The **codebase map's "Next lessons" table is the live queue** now
+> (reference/codebase-map.html) — it tracks ✓/→/· status. The list below
+> predates Lessons 4–7 and is kept only for the notes it carries;
+> trust the map for what's shipped.
+
 
 1. **Transactions & record-first mechanics** — what a commit
    guarantees, why Stripe can't be inside one, the two-commit

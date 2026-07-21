@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 7 — The third account</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>The third account</h1>
+<p class="subtitle">Lesson 7 · ~10 minutes · You refunded two charges on
+7/21 and told me it was done. It wasn't — the money is still sitting in
+an account you forgot you have.</p>
+
+<p>A refund is the only correction you get on 7/29. Settlement runs
+once — no in-app re-marking after it fires
+(<a href="../decisions.md">decisions.md</a>). So when a charge is wrong,
+your only move is to refund it in the Stripe dashboard. This lesson is
+about the half of that move you can't see.</p>
+
+<h2>Start with what you actually did</h2>
+
+<p>Two real charges went through your live account on 7/21. You refunded
+both, in good faith, and reported them complete. Here is what your books
+say right now:</p>
+
+<table class="row">
+  <tr><th>charge · saved card</th><td>$1.00 · fee $0.33 · full $1.00 transferred out</td></tr>
+  <tr><th>refund</th><td>$1.00 back to the card · fee $0.33 <span class="hot">kept by Stripe</span></td></tr>
+  <tr><th>transfer <span class="mono">tr_3TvdcV…</span></th><td class="hot">reversed: false — the $1.00 never came back</td></tr>
+  <tr><th>charge · tap-to-pay</th><td>$1.66 · fee $0.35 · full $1.66 transferred out</td></tr>
+  <tr><th>refund</th><td>$1.66 back to the card · fee $0.35 kept by Stripe</td></tr>
+  <tr><th>transfer <span class="mono">tr_3Tve3B…</span></th><td class="hot">reversed: false — the $1.66 never came back</td></tr>
+</table>
+
+<div class="callout noprint">
+  <span class="label">Stop — before you scroll</span>
+  Both cardholders got every cent back. The refunds succeeded. So what
+  is <em>wrong</em> with this picture? You now spot this kind of hole on
+  your own — take ten seconds, then tell me your answer. The rest of the
+  lesson is the mechanism behind it.
+</div>
+
+<p>The word doing all the work is <strong><span class="mono">reversed:
+false</span></strong>. To understand why that's a problem — and why it
+was invisible to you — you need the one thing the code lessons never
+taught, because it doesn't live in the repo. It lives in Stripe.</p>
+
+<h2>There are three accounts, not one</h2>
+
+<p class="note">“My Stripe” feels like one balance. It is three parties,
+and a refund only touches two of them.</p>
+
+<p>Every charge KnowaPlan makes moves money between <strong>three</strong>
+separate parties. Not two. The bug hides in the third.</p>
+
+<table class="ref">
+<thead>
+<tr><th>Account</th><th>Who</th><th>Role in one charge</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Cardholder</strong></td>
+  <td>Your friend</td>
+  <td>Pays their share. A refund returns their money here — and this
+      part is always visible and intuitive.</td>
+</tr>
+<tr>
+  <td><strong>Platform</strong></td>
+  <td><strong>You</strong>, as KnowaPlan</td>
+  <td>The charge is created here, so it lands in your balance first.
+      Stripe's fee is debited here. A refund is <strong>paid out of
+      here</strong>. This is the account
+      <a href="0002-where-the-money-actually-goes.html">Lesson 2</a>
+      showed going negative.</td>
+</tr>
+<tr>
+  <td><strong>Connected</strong></td>
+  <td>The planner (also you, for now)</td>
+  <td>Where the money is supposed to end up. <code>transfer_data</code>
+      moves the <strong>full</strong> share here the instant the charge
+      succeeds. <strong>A refund does not touch this account.</strong></td>
+</tr>
+</tbody>
+</table>
+
+<p>Read that last cell again. It is the whole lesson. When you refund,
+Stripe takes the money out of your <em>platform</em> balance to make the
+cardholder whole — but the dollars you already transferred are sitting
+in the <em>connected</em> account, and the refund leaves them exactly
+where they are.</p>
+
+<h2>Follow your $1.00 through all three</h2>
+
+<p>Watch the platform balance and the connected balance as your own $1.00
+charge moves. Every number here is the 2.9% + 30¢ rate on a dollar.</p>
+
+<table class="ref">
+<thead>
+<tr><th>Step</th><th>Platform (you)</th><th>Connected (planner)</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>Charge $1.00 succeeds</td>
+  <td>+$1.00 in, −$0.33 fee, −$1.00 transferred out = <strong>−$0.33</strong></td>
+  <td>+$1.00</td>
+</tr>
+<tr>
+  <td>Refund $1.00 <em>(what you did)</em></td>
+  <td>−$1.00 to the card = <strong class="hot">−$1.33</strong></td>
+  <td class="hot">still +$1.00</td>
+</tr>
+<tr>
+  <td>Reverse the transfer <em>(what you skipped)</em></td>
+  <td>+$1.00 pulled back = <strong>−$0.33</strong></td>
+  <td>−$1.00 = <strong>$0.00</strong></td>
+</tr>
+</tbody>
+</table>
+
+<p>Three things to take from that table:</p>
+
+<p><strong>1. The cardholder is whole either way.</strong> They paid
+$1.00, they got $1.00 back. Nothing you skipped affects them — which is
+exactly why the dashboard let you feel finished.</p>
+
+<p><strong>2. The reversal is what empties the connected account.</strong>
+Without it, a full dollar you refunded is stranded in the planner's
+account. With it, that account goes back to zero, as if the charge never
+happened.</p>
+
+<p><strong>3. You are still out the 33¢ fee, forever.</strong> Look at
+the platform's final row: −$0.33, reversal or not. Stripe
+<strong>keeps its fee on a refund</strong> — verified, quoted at the
+bottom. A refunded charge always costs you the fee. That's not the bug;
+that's just the price of a refund.</p>
+
+<h2>Why it looked fine — and why that's the trap</h2>
+
+<p>Here's the sharp part. Solo, both the platform and the connected
+account are <em>your</em> pockets. Add up your final numbers: platform
+−$0.33, connected $0.00 with the reversal — or platform −$1.33,
+connected +$1.00 <em>without</em> it. Both combine to the same
+<strong>−$0.33</strong>. The reversal moved no net money for you.</p>
+
+<div class="callout">
+  <span class="label">This is precisely why you skipped it and felt done</span>
+  When you are both planner and platform, the reversal changes nothing
+  you can see — same bottom line, same bank. The refund was visible and
+  intuitive; the reversal was neither. So you did the visible half,
+  reported complete, and you were right about everything you could
+  observe.
+</div>
+
+<p>Now put a second planner on the connected account. Refund your
+friend's $30 charge, skip the reversal, and the arithmetic stops being
+bookkeeping:</p>
+
+<table class="ref">
+<tbody>
+<tr><td>Your platform balance pays the refund</td><td class="hot">−$30.00</td></tr>
+<tr><td>The $30 you transferred sits in <em>their</em> account</td><td class="hot">+$30.00</td></tr>
+<tr><td>Net for you</td><td><strong>−$30.00, gone</strong></td></tr>
+<tr><td>Net for the other planner</td><td><strong>+$30.00 they shouldn't have</strong></td></tr>
+</tbody>
+</table>
+
+<p>You ate the refund out of your own balance while the money you were
+correcting sits in someone else's account. The reversal is the <em>only</em>
+thing that pulls it back. Skip it and you have quietly paid a stranger
+$30 to refund your own friend.</p>
+
+<div class="callout">
+  <span class="label">Why this is the 7/29 lesson, not a someday lesson</span>
+  Settlement is one-shot — no in-app re-mark. If you charge the wrong
+  person, or a walk-in lowers a share after a charge landed, the
+  dashboard <strong>refund + reversal</strong> is the entire correction
+  toolkit. A refund alone is a half-correction that reads as done. On
+  club night you need the reflex: <em>refund, then reverse, then read
+  <span class="mono">reversed: true</span>.</em>
+</div>
+
+<h2>Check yourself</h2>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="connected">
+  <div class="quiz-stem"><span class="n">1</span>You refund the $1.66
+  charge but don't reverse the transfer. Where is that $1.66 right now?</div>
+  <div class="quiz-choices">
+    <button data-key="card">Back on their card</button>
+    <button data-key="connected">Inside the connected account</button>
+    <button data-key="stripe">Still held by Stripe</button>
+    <button data-key="platform">In your platform balance</button>
+  </div>
+  <div class="quiz-fb" data-key="connected"><span class="verdict">Right</span>
+    — the transfer moved it there when the charge succeeded, and a refund
+    doesn't touch the connected account. It sits until you reverse it.</div>
+  <div class="quiz-fb" data-key="card"><span class="verdict">No</span>
+    — the card got its $1.66 back, but that money came out of your
+    <em>platform</em> balance, not out of the transferred dollars.</div>
+  <div class="quiz-fb" data-key="stripe"><span class="verdict">No</span>
+    — Stripe only keeps its 35¢ fee. The other $1.66 is a real transfer
+    sitting in a real account.</div>
+  <div class="quiz-fb" data-key="platform"><span class="verdict">No</span>
+    — the platform is where it briefly landed and where the refund was
+    paid <em>from</em>; the transfer already carried it out.</div>
+</div>
+
+<div class="quiz-q" data-answer="platform">
+  <div class="quiz-stem"><span class="n">2</span>The cardholder got every
+  cent back. After a refund with no reversal, who is out of pocket?</div>
+  <div class="quiz-choices">
+    <button data-key="card">The cardholder is</button>
+    <button data-key="none">Nobody, it nets</button>
+    <button data-key="platform">Your platform account</button>
+    <button data-key="connected">The connected account</button>
+  </div>
+  <div class="quiz-fb" data-key="platform"><span class="verdict">Right</span>
+    — the refund was paid from the platform, and nothing pulled the
+    transfer back, so the platform carries the whole hole.</div>
+  <div class="quiz-fb" data-key="none"><span class="verdict">No</span>
+    — it only nets when planner and platform are the same person. The
+    dollars are split across two accounts, not cancelled.</div>
+  <div class="quiz-fb" data-key="card"><span class="verdict">No</span>
+    — they were made whole; that's the one part that always works.</div>
+  <div class="quiz-fb" data-key="connected"><span class="verdict">No</span>
+    — the connected account is the one holding <em>extra</em> money, not
+    the one short.</div>
+</div>
+
+<div class="quiz-q" data-answer="theirs">
+  <div class="quiz-stem"><span class="n">3</span>Two planners share your
+  platform. You refund your friend's $30 and skip the reversal. What
+  breaks?</div>
+  <div class="quiz-choices">
+    <button data-key="theirs">Their account keeps it</button>
+    <button data-key="fine">Nothing at all breaks</button>
+    <button data-key="fee">Stripe refunds the fee</button>
+    <button data-key="card">The card stays charged</button>
+  </div>
+  <div class="quiz-fb" data-key="theirs"><span class="verdict">Right</span>
+    — you paid the $30 refund out of the shared platform, but the $30 you
+    transferred is parked in the other planner's account. You paid a
+    stranger to refund your friend.</div>
+  <div class="quiz-fb" data-key="fine"><span class="verdict">No</span>
+    — that's only true solo, where both accounts are yours. A second
+    owner turns the stranded transfer into someone else's money.</div>
+  <div class="quiz-fb" data-key="fee"><span class="verdict">No</span>
+    — Stripe keeps its fee on every refund. That's never the mechanism
+    that saves you here.</div>
+  <div class="quiz-fb" data-key="card"><span class="verdict">No</span>
+    — the refund works fine on the card side; the break is entirely on
+    the connected-account side.</div>
+</div>
+
+<div class="quiz-q" data-answer="reverse">
+  <div class="quiz-stem"><span class="n">4</span>Your two 7/21 transfers
+  read <span class="mono">reversed: false</span>. What makes them read
+  <span class="mono">reversed: true</span>?</div>
+  <div class="quiz-choices">
+    <button data-key="wait">Wait for it automatically</button>
+    <button data-key="again">Refund the charge again</button>
+    <button data-key="support">Contact Stripe support first</button>
+    <button data-key="reverse">Reverse the transfer explicitly</button>
+  </div>
+  <div class="quiz-fb" data-key="reverse"><span class="verdict">Right</span>
+    — reverse the transfer itself. At refund time it's the
+    <code>reverse_transfer</code> flag; after the fact it's a separate
+    reversal on the transfer. Either way, you ask for it.</div>
+  <div class="quiz-fb" data-key="wait"><span class="verdict">No</span>
+    — it never happens on its own for a destination charge. The default
+    is exactly the <span class="mono">reversed: false</span> you're
+    looking at.</div>
+  <div class="quiz-fb" data-key="again"><span class="verdict">No</span>
+    — a second refund can't apply; the charge is already fully refunded.
+    The transfer is a separate object.</div>
+  <div class="quiz-fb" data-key="support"><span class="verdict">No</span>
+    — you don't need them. It's a one-line API call or one action in your
+    own dashboard.</div>
+</div>
+
+</section>
+
+<h2>Do this now — it fixes your real books</h2>
+
+<p>Your two transfers are still <span class="mono">reversed: false</span>
+this minute. The refunds are done, but the reversals are a separate
+action you can still take after the fact:</p>
+
+<table class="ref">
+<tbody>
+<tr><td>1</td><td>Open transfer <span class="mono">tr_3TvdcV…</span>
+    ($1.00) and reverse it. Confirm it flips to
+    <span class="mono">reversed: true</span>.</td></tr>
+<tr><td>2</td><td>Same for <span class="mono">tr_3Tve3B…</span> ($1.66).</td></tr>
+<tr><td>3</td><td>Re-read both transfers. Two
+    <span class="mono">reversed: true</span> is the whole win of this
+    lesson — the connected account back to zero.</td></tr>
+</tbody>
+</table>
+
+<p>You'll still be down the two fees (33¢ + 35¢ = 68¢) — that's Stripe's,
+not a mistake. What the reversal fixes is the $2.66 that shouldn't be
+parked in the connected account. Solo it's a rehearsal; before the club
+night grows a second planner, it's the reflex that keeps you from paying
+other people's refunds. <strong>Not sure of the exact clicks? Ask me and
+I'll walk them with you.</strong></p>
+
+<div class="sourcebox">
+  <span class="label">Read next — primary source</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="https://docs.stripe.com/refunds"><strong>Refund and cancel
+  payments</strong></a> — Stripe</p>
+  <p style="margin:0;font-size:.87rem">The paragraph on connected
+  accounts states this lesson in one sentence: for a charge with
+  <code>transfer_data</code>, <em>“the destination account retains the
+  funds by default, which leaves your platform account to cover the
+  negative balance from the refund. To pull back the funds from the
+  connected account, set the <code>reverse_transfer</code> parameter to
+  true.”</em> And on the fee: Stripe’s
+  <a href="https://support.stripe.com/questions/understanding-fees-for-refunded-payments">fees-for-refunded-payments</a>
+  page — <em>“payment processing… fees from the original charge are not
+  returned.”</em></p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Sharp ones for right now: <em>“if the reversal changes nothing for me
+  solo, why bother before 7/29?”</em> · <em>“what happens to the
+  <code>refunded</code> Payment state — does KnowaPlan even know a
+  dashboard refund happened?”</em> · <em>“a walk-in lowers a share after
+  a charge landed — is that a refund + reversal too?”</em> That last one
+  is the walk-in milestone you'll author next.
+</div>
+
+<div class="footer">
+  <p><strong>Verification note.</strong> Facts checked against Stripe's
+  docs 2026-07-21: the <code>reverse_transfer</code> default and the
+  fee-retention rule are quoted above, both confirmed via Stripe's own
+  text. Your two live charges, fees (33¢ on $1.00, 35¢ on $1.66), and the
+  two <code>reversed: false</code> transfers are from your 7/21 test run,
+  recorded in <a href="../learning-records/0007-three-account-topology-is-the-live-gap.md">learning-records/0007</a>.
+  Nothing here is broken in a way that costs you money <em>while you are
+  solo</em> — it's the habit that has to be right before you aren't.</p>
+  <p><a href="0007-settle-event-end-to-end.html">← Lesson 6</a> ·
+     <a href="0002-where-the-money-actually-goes.html">Lesson 2 (the fee)</a> ·
+     <a href="../reference/three-accounts.html">Field guide — the three accounts</a> ·
+     <a href="../MISSION.md">Mission</a> ·
+     <a href="../RESOURCES.md">Resources</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
