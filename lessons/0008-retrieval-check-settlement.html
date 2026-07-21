@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retrieval check — settlement</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>Retrieval check — settlement</h1>
+<p class="subtitle">Five fresh questions · ~5 minutes · A clean
+instrument, because the last one wasn't</p>
+
+<p>You caught a real defect: the correct answer was in the first slot
+on <strong>82%</strong> of every question in this workspace, and on
+<strong>100%</strong> of Lessons 3 through 6 — twenty-one in a row.
+That's not a quiz, it's a pattern with text attached.</p>
+
+<div class="callout">
+  <span class="label">Why your 1/5 tells us nothing</span>
+  A slot tell doesn't just make a quiz easy — it can <strong>invert
+  a score</strong>. Once a run of first-slot answers is long enough,
+  the reasonable move is to stop trusting the obvious one. Your wrong
+  picks were slots 4, 4, 4 and 3; the single right one was slot 1.
+  That is what second-guessing a broken instrument looks like, and
+  it's indistinguishable from not knowing the material. So the score
+  is <strong>void</strong> — not bad, void. Slots are now balanced
+  and <a href="../assets/check_quiz.py">check_quiz.py</a> fails any
+  lesson that drifts back.
+</div>
+
+<p>These five questions are new — different angles on the same
+<a href="0007-settle-event-end-to-end.html">settlement mechanics</a>,
+so this is genuine recall rather than recognising items you've already
+seen the answers to. One shot each. Answer what you actually think.</p>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="self">
+  <div class="quiz-stem"><span class="n">1</span>You delete the
+  <code>if attendee.id != planner.attendee_id</code> line from the
+  <code>charged</code> comprehension. What happens at settlement?</div>
+  <div class="quiz-choices">
+    <button data-key="bigger">The share gets bigger</button>
+    <button data-key="nothing">Nothing changes at all</button>
+    <button data-key="self">Your own card charged</button>
+    <button data-key="stuck">The event cannot settle</button>
+  </div>
+  <div class="quiz-fb" data-key="self"><span class="verdict">Right</span>
+    — you'd get a Payment row like anyone else, so your card is charged
+    and your own money routes to your own Connect account minus
+    Stripe's fee. Pure waste, which is why the filter exists.</div>
+  <div class="quiz-fb" data-key="bigger"><span class="verdict">No</span>
+    — the split is unaffected. You were already counted in
+    <code>participants</code>, and that's the list the divisor comes
+    from. This line only controls <em>charging</em>.</div>
+  <div class="quiz-fb" data-key="nothing"><span class="verdict">No</span>
+    — it's the one line standing between you and charging yourself.
+    Nothing else in the function knows the planner is special.</div>
+  <div class="quiz-fb" data-key="stuck"><span class="verdict">No</span>
+    — settlement would complete happily. That's what makes it
+    dangerous: the failure is a silent extra charge, not a crash.</div>
+</div>
+
+<div class="quiz-q" data-answer="dangling">
+  <div class="quiz-stem"><span class="n">2</span>Ana's charge raises a
+  network error — Stripe never answered. What does her roster row show
+  after settlement?</div>
+  <div class="quiz-choices">
+    <button data-key="dangling">Dangling, offering a retry</button>
+    <button data-key="unpaid">Unpaid, offering a link</button>
+    <button data-key="paid">Paid, with a receipt</button>
+    <button data-key="gone">Nothing, the row vanishes</button>
+  </div>
+  <div class="quiz-fb" data-key="dangling"><span class="verdict">Right</span>
+    — the stamp was committed, the state never left <code>none</code>,
+    so it's dangling: charge unconfirmed. Retry re-sends the same key
+    and stamped amount, and Stripe replays whatever really
+    happened.</div>
+  <div class="quiz-fb" data-key="unpaid"><span class="verdict">No</span>
+    — <code>unpaid</code> means the charge <em>resolved</em> and didn't
+    collect (a decline, or no card). Here nothing resolved. Offering
+    her a link could collect a second time.</div>
+  <div class="quiz-fb" data-key="paid"><span class="verdict">No</span>
+    — <code>paid</code> is only written after Stripe returns
+    <code>succeeded</code>. Never claim collection you haven't been
+    told about.</div>
+  <div class="quiz-fb" data-key="gone"><span class="verdict">No</span>
+    — the row is the whole point. It was committed <em>before</em> the
+    call precisely so a failure leaves something findable.</div>
+</div>
+
+<div class="quiz-q" data-answer="declined">
+  <div class="quiz-stem"><span class="n">3</span>Which of these never
+  reaches the settle loop's <code>except</code> clause?</div>
+  <div class="quiz-choices">
+    <button data-key="network">A network connection failure</button>
+    <button data-key="status">A non-succeeded intent status</button>
+    <button data-key="mint">A failed link mint</button>
+    <button data-key="declined">A declined credit card</button>
+  </div>
+  <div class="quiz-fb" data-key="declined"><span class="verdict">Right</span>
+    — <code>charge_share</code> catches <code>CardError</code> itself
+    and returns an <code>unpaid</code> row. A decline is an answer, and
+    answers become row states rather than exceptions.</div>
+  <div class="quiz-fb" data-key="network"><span class="verdict">No</span>
+    — that's a <code>StripeError</code>, caught right there, and it
+    leaves the row dangling because nothing resolved.</div>
+  <div class="quiz-fb" data-key="status"><span class="verdict">No</span>
+    — your own code raises <code>RuntimeError</code> rather than write
+    <code>paid</code> for money that didn't collect. That's the second
+    class named in the except tuple.</div>
+  <div class="quiz-fb" data-key="mint"><span class="verdict">No</span>
+    — it reaches the except too, but by then <code>unpaid</code> is
+    already committed, so the label comes out <code>unpaid</code> and
+    the fix is a fresh link.</div>
+</div>
+
+<div class="quiz-q" data-answer="stamped">
+  <div class="quiz-stem"><span class="n">4</span>Settle crashed
+  mid-run; you press it again. Which row gets a fresh Stripe call
+  reusing the same idempotency key?</div>
+  <div class="quiz-choices">
+    <button data-key="paid">The already paid row</button>
+    <button data-key="stamped">The dangling stamped row</button>
+    <button data-key="unpaid">The unpaid linked row</button>
+    <button data-key="planner">The planner's skipped row</button>
+  </div>
+  <div class="quiz-fb" data-key="stamped"><span class="verdict">Right</span>
+    — state <code>none</code> plus a stamp. It re-sends
+    <code>charge_requested_cents</code>, never a recomputed amount,
+    because identical parameters are what make a replay safe.</div>
+  <div class="quiz-fb" data-key="paid"><span class="verdict">No</span>
+    — found in <code>existing</code> as <code>paid</code> and skipped.
+    That lookup is what makes pressing Settle twice safe.</div>
+  <div class="quiz-fb" data-key="unpaid"><span class="verdict">No</span>
+    — skipped deliberately, and its link is <em>not</em> re-minted:
+    the stored one is still live, and a second link means a second way
+    to collect.</div>
+  <div class="quiz-fb" data-key="planner"><span class="verdict">No</span>
+    — the planner never gets a Payment row at all, so there's nothing
+    to retry.</div>
+</div>
+
+<div class="quiz-q" data-answer="absorb">
+  <div class="quiz-stem"><span class="n">5</span>Wiring gross-up, you
+  leave the cap as <code>min(share, estimate)</code> with a grossed
+  estimate stored. What goes wrong?</div>
+  <div class="quiz-choices">
+    <button data-key="toomuch">Attendees pay too much</button>
+    <button data-key="never">The cap never fires</button>
+    <button data-key="absorb">You absorb the fee</button>
+    <button data-key="reject">Stripe rejects the charge</button>
+  </div>
+  <div class="quiz-fb" data-key="absorb"><span class="verdict">Right</span>
+    — <code>share</code> is a net number and the estimate is a gross
+    one, so the smaller net wins and you bill the un-grossed amount.
+    You'd eat the entire fee while believing the cap protected
+    you.</div>
+  <div class="quiz-fb" data-key="toomuch"><span class="verdict">No</span>
+    — the opposite. Mixing the units makes the billed number too
+    <em>low</em>, and the shortfall lands on you.</div>
+  <div class="quiz-fb" data-key="never"><span class="verdict">No</span>
+    — it fires more eagerly than it should, because a net share is
+    almost always below a grossed estimate.</div>
+  <div class="quiz-fb" data-key="reject"><span class="verdict">No</span>
+    — Stripe takes any positive amount happily. Nothing external
+    catches a units bug; only your own test does.</div>
+</div>
+
+</section>
+
+<div class="sourcebox">
+  <span class="label">If a question surprised you</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="0007-settle-event-end-to-end.html"><strong>Lesson 6 —
+  settle_event end to end</strong></a></p>
+  <p style="margin:0;font-size:.87rem">Go back to the section, not the
+  whole lesson: Q1 → the planner skip · Q2 and Q3 → the loop that
+  can't be aborted · Q4 → what a second press of Settle does · Q5 →
+  where your gross_up wiring goes. Then run
+  <code>.venv/bin/pytest -k SettleFailures -v</code> and read the four
+  test names as sentences.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">Tell me the score</span>
+  Whatever it is, it's usable data now — which the last one wasn't. If
+  it's low, that's a signal my method is wrong for this material, not
+  that you are: reading a trace is passive, and the fix is to make you
+  <em>find</em> lines rather than recognise descriptions of them. Say
+  the number and I'll adapt.
+</div>
+
+<div class="footer">
+  <p><a href="0007-settle-event-end-to-end.html">← Lesson 6</a> ·
+     <a href="../reference/codebase-map.html">The map</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../MISSION.md">Mission</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
