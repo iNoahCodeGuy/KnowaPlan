@@ -28,10 +28,10 @@ before you tap; the wrong answers are where the teaching is.</p>
   one attendee's money actually moved. Which single column answers
   it?</div>
   <div class="quiz-choices">
-    <button data-key="state">The state column</button>
     <button data-key="pi">The intent id</button>
-    <button data-key="stamp">The requested stamp</button>
     <button data-key="reason">The reason column</button>
+    <button data-key="state">The state column</button>
+    <button data-key="stamp">The requested stamp</button>
   </div>
   <div class="quiz-fb" data-key="state"><span class="verdict">Right</span>
     — <code>state</code> is the verdict. <code>charged_cents</code> tells
@@ -83,10 +83,10 @@ before you tap; the wrong answers are where the teaching is.</p>
   <code>state=none</code>, <code>charge_requested_at</code> set,
   <code>charged_cents=NULL</code>. What is it, and what do you do?</div>
   <div class="quiz-choices">
-    <button data-key="dangling">Dangling, then retry</button>
     <button data-key="pristine">Pristine, do nothing</button>
     <button data-key="declined">Declined, send link</button>
     <button data-key="collected">Collected, tell them</button>
+    <button data-key="dangling">Dangling, then retry</button>
   </div>
   <div class="quiz-fb" data-key="dangling"><span class="verdict">Right</span>
     — stamp set, state still <code>none</code>: we told Stripe to take $30
@@ -112,8 +112,8 @@ before you tap; the wrong answers are where the teaching is.</p>
   account absorbs the fee, you rebuild it as a proper Standard account.
   What changes about who pays Stripe?</div>
   <div class="quiz-choices">
-    <button data-key="nothing">Nothing changes at all</button>
     <button data-key="account">Connected account now pays</button>
+    <button data-key="nothing">Nothing changes at all</button>
     <button data-key="half">Fee is cut half</button>
     <button data-key="reimbursed">Platform gets fully reimbursed</button>
   </div>
@@ -139,9 +139,9 @@ before you tap; the wrong answers are where the teaching is.</p>
   <code>state=unpaid</code>, a <code>pi_…</code> id is present,
   <code>state_reason=insufficient_funds</code>. Did his money move?</div>
   <div class="quiz-choices">
+    <button data-key="unknown">Unknown, outcome still pending</button>
     <button data-key="no">No, attempt was declined</button>
     <button data-key="yes">Yes, charge fully succeeded</button>
-    <button data-key="unknown">Unknown, outcome still pending</button>
     <button data-key="partial">Yes, but only partially</button>
   </div>
   <div class="quiz-fb" data-key="no"><span class="verdict">Right</span>
@@ -169,9 +169,9 @@ before you tap; the wrong answers are where the teaching is.</p>
   code makes the full amount transfer out?</div>
   <div class="quiz-choices">
     <button data-key="transfer">The transfer_data omits amount</button>
+    <button data-key="onbehalf">The on_behalf_of is wrong</button>
     <button data-key="account">The account is Standard</button>
     <button data-key="feespayer">The fees.payer flag flipped</button>
-    <button data-key="onbehalf">The on_behalf_of is wrong</button>
   </div>
   <div class="quiz-fb" data-key="transfer"><span class="verdict">Right</span>
     — Stripe's API: "if no amount is set, the full amount is transferred."
@@ -194,10 +194,10 @@ before you tap; the wrong answers are where the teaching is.</p>
   half your roster sits at <code>state=unpaid</code>. What does that
   mean?</div>
   <div class="quiz-choices">
-    <button data-key="normal">Normal, they need links</button>
     <button data-key="broken">Broken, the settle failed</button>
-    <button data-key="dangling">Dangling, retry each one</button>
     <button data-key="refunded">Refunded, money went back</button>
+    <button data-key="normal">Normal, they need links</button>
+    <button data-key="dangling">Dangling, retry each one</button>
   </div>
   <div class="quiz-fb" data-key="normal"><span class="verdict">Right</span>
     — <code>unpaid</code> is the normal resting state for anyone without a

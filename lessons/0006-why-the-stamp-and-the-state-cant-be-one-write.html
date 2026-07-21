@@ -170,10 +170,10 @@ commit and then read why.</p>
   <div class="quiz-stem"><span class="n">1</span>A transaction is
   <strong>atomic</strong>. In plain terms, that means:</div>
   <div class="quiz-choices">
-    <button data-key="both">Both writes or neither</button>
-    <button data-key="first">Whichever write ran first</button>
-    <button data-key="fast">The single fastest write</button>
     <button data-key="one">One write at once</button>
+    <button data-key="both">Both writes or neither</button>
+    <button data-key="fast">The single fastest write</button>
+    <button data-key="first">Whichever write ran first</button>
   </div>
   <div class="quiz-fb" data-key="both"><span class="verdict">Right</span>
     — all-or-nothing. The demo proved it: <code>present=1</code> ran
@@ -195,10 +195,10 @@ commit and then read why.</p>
   <div class="quiz-stem"><span class="n">2</span>Why can't the Stripe
   charge just go <em>inside</em> the DB transaction with the writes?</div>
   <div class="quiz-choices">
-    <button data-key="uncharge">Rollback can't un-charge cards</button>
-    <button data-key="slow">Stripe simply runs slowly</button>
-    <button data-key="forbid">Transactions forbid network calls</button>
     <button data-key="norollback">Stripe lacks a rollback</button>
+    <button data-key="forbid">Transactions forbid network calls</button>
+    <button data-key="slow">Stripe simply runs slowly</button>
+    <button data-key="uncharge">Rollback can't un-charge cards</button>
   </div>
   <div class="quiz-fb" data-key="uncharge"><span class="verdict">Right</span>
     — a transaction's power stops at your database's edge.
@@ -224,10 +224,10 @@ commit and then read why.</p>
   <div class="quiz-stem"><span class="n">3</span>You commit the stamp
   <em>before</em> charging so that a crash in the gap leaves:</div>
   <div class="quiz-choices">
-    <button data-key="trace">A queryable trace</button>
     <button data-key="untraced">An untraced charge</button>
-    <button data-key="noattempt">No charge attempted</button>
     <button data-key="rollback">A full rollback</button>
+    <button data-key="trace">A queryable trace</button>
+    <button data-key="noattempt">No charge attempted</button>
   </div>
   <div class="quiz-fb" data-key="trace"><span class="verdict">Right</span>
     — the dangling row: stamp set, <code>state=none</code>. You can
@@ -255,9 +255,9 @@ commit and then read why.</p>
   matter?</div>
   <div class="quiz-choices">
     <button data-key="durable">The intent is durable</button>
-    <button data-key="succeeded">The charge already succeeded</button>
     <button data-key="closed">The session got closed</button>
     <button data-key="settled">The event is settled</button>
+    <button data-key="succeeded">The charge already succeeded</button>
   </div>
   <div class="quiz-fb" data-key="durable"><span class="verdict">Right</span>
     — <code>False</code> means no uncommitted work is open: the stamp was

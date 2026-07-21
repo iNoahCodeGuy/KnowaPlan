@@ -220,10 +220,10 @@ change to <code>retry_dangling</code> at all.</li>
   <div class="quiz-stem"><span class="n">1</span>Which code makes a
   playing planner count in the split but never get charged?</div>
   <div class="quiz-choices">
-    <button data-key="filter">The charged list filter</button>
-    <button data-key="loop">The participants loop guard</button>
-    <button data-key="existing">The existing rows lookup</button>
     <button data-key="commit">The final commit block</button>
+    <button data-key="filter">The charged list filter</button>
+    <button data-key="existing">The existing rows lookup</button>
+    <button data-key="loop">The participants loop guard</button>
   </div>
   <div class="quiz-fb" data-key="filter"><span class="verdict">Right</span>
     — <code>if attendee.id != planner.attendee_id</code> builds
@@ -247,8 +247,8 @@ change to <code>retry_dangling</code> at all.</li>
   mid-settle. Where is that <code>CardError</code> handled?</div>
   <div class="quiz-choices">
     <button data-key="inside">Inside the charge_share call</button>
-    <button data-key="loop">Inside the loop's except</button>
     <button data-key="collect">Inside _collect's second commit</button>
+    <button data-key="loop">Inside the loop's except</button>
     <button data-key="report">Inside the settlement report</button>
   </div>
   <div class="quiz-fb" data-key="inside"><span class="verdict">Right</span>
@@ -276,9 +276,9 @@ change to <code>retry_dangling</code> at all.</li>
   charging Ana. You press Settle again. What happens to Ana?</div>
   <div class="quiz-choices">
     <button data-key="skipped">Skipped without a recharge</button>
-    <button data-key="again">Charged a second time</button>
-    <button data-key="refund">Refunded then charged again</button>
     <button data-key="dangle">Left dangling for retry</button>
+    <button data-key="refund">Refunded then charged again</button>
+    <button data-key="again">Charged a second time</button>
   </div>
   <div class="quiz-fb" data-key="skipped"><span class="verdict">Right</span>
     — her row is in <code>existing</code> as <code>paid</code>, so the
@@ -303,10 +303,10 @@ change to <code>retry_dangling</code> at all.</li>
   failure <code>dangling</code> versus <code>unpaid</code> by
   reading:</div>
   <div class="quiz-choices">
-    <button data-key="state">Payment state at failure</button>
     <button data-key="exc">Which exception was raised</button>
-    <button data-key="card">Whether a card exists</button>
     <button data-key="stamp">The stamp timestamp age</button>
+    <button data-key="card">Whether a card exists</button>
+    <button data-key="state">Payment state at failure</button>
   </div>
   <div class="quiz-fb" data-key="state"><span class="verdict">Right</span>
     — <code>"dangling" if payment.state == "none" else "unpaid"</code>.
@@ -329,9 +329,9 @@ change to <code>retry_dangling</code> at all.</li>
   <code>share</code> stays the net target. Which value becomes the
   grossed number?</div>
   <div class="quiz-choices">
-    <button data-key="stamp">The stamped charge cents</button>
     <button data-key="total">The event total cost</button>
     <button data-key="divisor">The divisor participant count</button>
+    <button data-key="stamp">The stamped charge cents</button>
     <button data-key="settled">The settled at timestamp</button>
   </div>
   <div class="quiz-fb" data-key="stamp"><span class="verdict">Right</span>

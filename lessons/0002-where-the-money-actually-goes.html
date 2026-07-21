@@ -154,10 +154,10 @@ production.”</p>
   <div class="quiz-stem"><span class="n">1</span>Marcus's $30 charge
   succeeds. Who ends up holding the $30?</div>
   <div class="quiz-choices">
+    <button data-key="stripe">Stripe holds it</button>
     <button data-key="connected">Planner's connected account</button>
     <button data-key="platform">Your platform account</button>
     <button data-key="split">Split between both</button>
-    <button data-key="stripe">Stripe holds it</button>
   </div>
   <div class="quiz-fb" data-key="connected"><span class="verdict">Right</span>
     — the full $30, because <code>transfer_data</code> has no
@@ -176,10 +176,10 @@ production.”</p>
   <div class="quiz-stem"><span class="n">2</span>Same charge. How does
   your <em>platform</em> balance move?</div>
   <div class="quiz-choices">
-    <button data-key="plus30">Plus thirty dollars</button>
-    <button data-key="minus">Minus one seventeen</button>
     <button data-key="zero">Exactly zero change</button>
+    <button data-key="plus30">Plus thirty dollars</button>
     <button data-key="plus117">Plus one seventeen</button>
+    <button data-key="minus">Minus one seventeen</button>
   </div>
   <div class="quiz-fb" data-key="minus"><span class="verdict">Right</span>
     — in $28.83 net, out $30.00 transferred. You're down $1.17. Your real
@@ -200,10 +200,10 @@ production.”</p>
   thing CLAUDE.md claims you're using — specifically hoping the planner
   absorbs Stripe's fee. What changes?</div>
   <div class="quiz-choices">
+    <button data-key="refund">Platform gets reimbursed</button>
+    <button data-key="half">Fee gets halved</button>
     <button data-key="nothing">Nothing at all</button>
     <button data-key="account">Connected account pays</button>
-    <button data-key="half">Fee gets halved</button>
-    <button data-key="refund">Platform gets reimbursed</button>
   </div>
   <div class="quiz-fb" data-key="nothing"><span class="verdict">Right —
     and this is the one I got wrong</span>
@@ -229,10 +229,10 @@ production.”</p>
   players including you, everyone's share is $30. Your friends each pay
   $30.00. <strong>What do you actually pay?</strong></div>
   <div class="quiz-choices">
-    <button data-key="3000">$30.00 exactly</button>
     <button data-key="3351">$33.51 exactly</button>
     <button data-key="2883">$28.83 exactly</button>
     <button data-key="12000">$120.00 exactly</button>
+    <button data-key="3000">$30.00 exactly</button>
   </div>
   <div class="quiz-fb" data-key="3351"><span class="verdict">Right</span>
     — $120 out, $90 back, minus $3.51 in fees on the three charges. You

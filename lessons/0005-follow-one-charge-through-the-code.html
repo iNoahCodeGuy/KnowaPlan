@@ -194,10 +194,10 @@ concept. Answer from what you just read, not from memory of the idea.</p>
   signature has no <code>session</code> parameter. What does that
   prove?</div>
   <div class="quiz-choices">
-    <button data-key="cannot">It cannot commit</button>
-    <button data-key="stateless">It stays stateless</button>
     <button data-key="bug">It's a bug</button>
     <button data-key="nodb">It skips Stripe</button>
+    <button data-key="stateless">It stays stateless</button>
+    <button data-key="cannot">It cannot commit</button>
   </div>
   <div class="quiz-fb" data-key="cannot"><span class="verdict">Right</span>
     — a commit is <code>session.commit()</code>; with no session in
@@ -221,9 +221,9 @@ concept. Answer from what you just read, not from memory of the idea.</p>
   before <code>_collect</code>'s commit. What does the DB row say?</div>
   <div class="quiz-choices">
     <button data-key="dangling">state none, dangling</button>
-    <button data-key="paid">state paid, done</button>
     <button data-key="unpaid">state unpaid, declined</button>
     <button data-key="gone">no row, pristine</button>
+    <button data-key="paid">state paid, done</button>
   </div>
   <div class="quiz-fb" data-key="dangling"><span class="verdict">Right —
     and this is the deep one</span>
@@ -248,10 +248,10 @@ concept. Answer from what you just read, not from memory of the idea.</p>
   passes <code>destination</code> but no <code>amount</code>, on a
   destination charge. What actually results?</div>
   <div class="quiz-choices">
-    <button data-key="both">Full transfer, platform fee</button>
     <button data-key="net">Net transfer, no fee</button>
-    <button data-key="split">Split transfer, shared fee</button>
     <button data-key="none">No transfer, held funds</button>
+    <button data-key="both">Full transfer, platform fee</button>
+    <button data-key="split">Split transfer, shared fee</button>
   </div>
   <div class="quiz-fb" data-key="both"><span class="verdict">Right</span>
     — no <code>amount</code> means "transfer all of it," so the full
@@ -274,10 +274,10 @@ concept. Answer from what you just read, not from memory of the idea.</p>
   <code>charge_share</code> denied its own commit — what would break
   if it had one?</div>
   <div class="quiz-choices">
-    <button data-key="order">The guaranteed commit order</button>
-    <button data-key="speed">The request would slow</button>
-    <button data-key="stripe">Stripe forbids nested commits</button>
     <button data-key="async">Async disallows two commits</button>
+    <button data-key="order">The guaranteed commit order</button>
+    <button data-key="stripe">Stripe forbids nested commits</button>
+    <button data-key="speed">The request would slow</button>
   </div>
   <div class="quiz-fb" data-key="order"><span class="verdict">Right</span>
     — record-first needs intent committed <em>before</em> the Stripe

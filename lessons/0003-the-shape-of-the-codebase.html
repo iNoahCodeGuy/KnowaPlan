@@ -152,10 +152,10 @@ changes are a command, never startup magic.</p>
   Exactly one file <em>defines</em> whether pending → going is a
   legal move. Which?</div>
   <div class="quiz-choices">
-    <button data-key="sm">state_machines.py</button>
-    <button data-key="rsvps">rsvps.py</button>
     <button data-key="web">web.py</button>
     <button data-key="models">models.py</button>
+    <button data-key="sm">state_machines.py</button>
+    <button data-key="rsvps">rsvps.py</button>
   </div>
   <div class="quiz-fb" data-key="sm"><span class="verdict">Right</span>
     — the table <em>defines</em> legality; rsvps.py merely
@@ -182,10 +182,10 @@ changes are a command, never startup magic.</p>
   feature that must write <code>rsvp.state = "declined"</code>. In
   which file does that assignment belong?</div>
   <div class="quiz-choices">
-    <button data-key="rsvps">rsvps.py</button>
-    <button data-key="web">web.py</button>
-    <button data-key="sm">state_machines.py</button>
     <button data-key="models">models.py</button>
+    <button data-key="sm">state_machines.py</button>
+    <button data-key="web">web.py</button>
+    <button data-key="rsvps">rsvps.py</button>
   </div>
   <div class="quiz-fb" data-key="rsvps"><span class="verdict">Right</span>
     — a service, behind a table check, owning its commit. If the
@@ -211,8 +211,8 @@ changes are a command, never startup magic.</p>
   just returned: <code>payment.state</code> is now
   <code>"paid"</code> — in memory. Whose code commits it?</div>
   <div class="quiz-choices">
-    <button data-key="settlement">settlement.py</button>
     <button data-key="payments">payments.py</button>
+    <button data-key="settlement">settlement.py</button>
     <button data-key="db">db.py</button>
     <button data-key="web">web.py</button>
   </div>

@@ -105,10 +105,10 @@ are where the learning is, so don't hedge — commit, then read why.</p>
     <tr><th>state_reason</th><td class="null">NULL</td></tr>
   </table>
   <div class="quiz-choices">
+    <button data-key="link">Link awaiting payment</button>
     <button data-key="pristine">Nothing charged yet</button>
     <button data-key="collected">Money was collected</button>
     <button data-key="dangling">Charge outcome unknown</button>
-    <button data-key="link">Link awaiting payment</button>
   </div>
   <div class="quiz-fb" data-key="pristine"><span class="verdict">Right</span>
     — pristine. <code>state=none</code> with no stamp means we never even
@@ -137,10 +137,10 @@ are where the learning is, so don't hedge — commit, then read why.</p>
     <tr><th>state_reason</th><td class="null">NULL</td></tr>
   </table>
   <div class="quiz-choices">
-    <button data-key="pristine">Nothing charged yet</button>
-    <button data-key="collected">Money was collected</button>
-    <button data-key="dangling">Charge outcome unknown</button>
     <button data-key="link">Link awaiting payment</button>
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="collected">Money was collected</button>
   </div>
   <div class="quiz-fb" data-key="dangling"><span class="verdict">Right</span>
     — and this is <em>the</em> row to recognise. The stamp says we were about
@@ -176,10 +176,10 @@ are where the learning is, so don't hedge — commit, then read why.</p>
     <tr><th>state_reason</th><td class="null">NULL</td></tr>
   </table>
   <div class="quiz-choices">
-    <button data-key="pristine">Nothing charged yet</button>
     <button data-key="collected">Money was collected</button>
-    <button data-key="dangling">Charge outcome unknown</button>
     <button data-key="link">Link awaiting payment</button>
+    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="dangling">Charge outcome unknown</button>
   </div>
   <div class="quiz-fb" data-key="collected"><span class="verdict">Right</span>
     — <code>state=paid</code> and <code>charged_cents=3000</code>. $30 is in
@@ -208,10 +208,10 @@ are where the learning is, so don't hedge — commit, then read why.</p>
     <tr><th>state_reason</th><td>no_card</td></tr>
   </table>
   <div class="quiz-choices">
-    <button data-key="pristine">Nothing charged yet</button>
+    <button data-key="link">Link awaiting payment</button>
     <button data-key="collected">Money was collected</button>
     <button data-key="dangling">Charge outcome unknown</button>
-    <button data-key="link">Link awaiting payment</button>
+    <button data-key="pristine">Nothing charged yet</button>
   </div>
   <div class="quiz-fb" data-key="link"><span class="verdict">Right</span>
     — and notice this is <em>not a failure</em>. Priya chose cardless; the
@@ -243,9 +243,9 @@ are where the learning is, so don't hedge — commit, then read why.</p>
     <tr><th>state_reason</th><td class="hot">insufficient_funds</td></tr>
   </table>
   <div class="quiz-choices">
-    <button data-key="pristine">Nothing charged yet</button>
-    <button data-key="collected">Money was collected</button>
     <button data-key="dangling">Charge outcome unknown</button>
+    <button data-key="collected">Money was collected</button>
+    <button data-key="pristine">Nothing charged yet</button>
     <button data-key="link">Link awaiting payment</button>
   </div>
   <div class="quiz-fb" data-key="link"><span class="verdict">Right —

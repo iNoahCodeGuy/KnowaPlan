@@ -205,6 +205,29 @@ line by line (CLAUDE.md: money code is not authored wholesale).
   lesson before shipping; all 7 pass now.
 - Still unverified: quiz results for Lessons 4, 5, and 6. Ask.
 
+### ⚠️ POSITION BIAS — he caught it, and it voids the Lesson 6 score
+
+Noah scored 1/5 on Lesson 6 and asked "is there a reason why it's
+always A?" Measured it: **82% of all 33 questions had the answer in
+slot 1; lessons 3–6 were 100%** (21 straight). That is a broken
+instrument, and worse than an easy one — a learner who spots the run
+starts AVOIDING slot 1, which is exactly his transcript (wrong picks
+at slots 4/4/4/3, the single right one at slot 1).
+
+- **Treat the 1/5 as void.** Full reasoning in
+  learning-records/0006. settle_event comprehension is UNMEASURED,
+  not failed; do not branch the curriculum on it.
+- Earlier scores (6/7 review, 2/4 L3) carried the same bias but are
+  inconsistent with blind slot-picking, so the concept→code seam
+  finding in records 0004/0005 still stands.
+- **Fixed:** all lessons rebalanced to 30/24/24/21 across slots, and
+  check_quiz.py now FAILS any lesson where one slot holds the answer
+  >50% of the time. Run it before shipping any lesson — it has now
+  caught two distinct real defects (word-count tells, position bias).
+- Lesson: he is a sharper reviewer of my instruments than I was.
+  When he questions a lesson's construction, measure it before
+  answering — both times the measurement was worse than my guess.
+
 ## Open threads / candidate next lessons
 
 1. **Transactions & record-first mechanics** — what a commit
