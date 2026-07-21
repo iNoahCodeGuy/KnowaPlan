@@ -15,9 +15,14 @@
         action="/e/{{ event.event_token }}/rsvp">
     <label for="name">Your name</label>
     <input id="name" name="name" required
+           autocomplete="name"
            value="{{ form.get('name', '') }}">
     <label for="phone">Your phone</label>
-    <input id="phone" name="phone" required
+    {# Autofill invited on purpose: normalize_phone absorbs any
+       format it pastes (app/phone.py), and tel keeps the numeric
+       keypad up courtside. #}
+    <input id="phone" name="phone" required type="tel"
+           inputmode="tel" autocomplete="tel"
            value="{{ form.get('phone', '') }}">
     <button type="submit">RSVP</button>
   </form>

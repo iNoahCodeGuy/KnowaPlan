@@ -26,7 +26,10 @@ report.shortfall_cents %} ·
     {% if o.link_url %}
       <p><code>{{ o.link_url }}</code></p>
       {% if attendee %}
-      <a class="btnish" href="sms:{{ attendee.phone }}?body={{
+      {# sms: in the iOS form — +1 E.164, &body (a ?body opens
+         Messages EMPTY on iOS, and courtside collection runs on
+         the planner's iPhone). Android planners: post-v0. #}
+      <a class="btnish" href="sms:+1{{ attendee.phone }}&body={{
         ('Your share for ' ~ event.title ~ ': ' ~
          ((payment.charge_requested_cents
            if payment else report.charge_cents) | dollars) ~

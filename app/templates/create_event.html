@@ -6,9 +6,11 @@
 <form class="stack" method="post" action="/events">
   <label for="planner_name">Your name</label>
   <input id="planner_name" name="planner_name" required
+         autocomplete="name"
          value="{{ form.get('planner_name', '') }}">
   <label for="planner_phone">Your phone</label>
   <input id="planner_phone" name="planner_phone" required
+         type="tel" inputmode="tel" autocomplete="tel"
          value="{{ form.get('planner_phone', '') }}">
   <label for="title">Event title</label>
   <input id="title" name="title" required

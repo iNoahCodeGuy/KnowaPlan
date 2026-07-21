@@ -13,7 +13,8 @@
 
 {% if card_banner == "saved" %}
 <p class="ok">Card saved ✓ — we'll charge only your actual share
-  after the game. Nothing is charged now.</p>
+  after the game, and only if you play. Nothing is charged
+  now.</p>
 {% elif card_banner == "failed" %}
 <p class="error">That card didn't save ({{ card_error }}). Try
   another card below, or skip it — you'll get a tap-to-pay link
@@ -43,8 +44,8 @@
   {% if attendee.stripe_payment_method_id %}
     <p><span class="badge">card on file</span> We'll charge only
     your actual share after the game — usually around
-    {{ event.estimated_share_cents | dollars }}. Nothing is
-    charged now.</p>
+    {{ event.estimated_share_cents | dollars }} — and
+    only if you play. Nothing is charged now.</p>
   {% elif not publishable_key %}
     <p class="muted">Card saving isn't configured
     (STRIPE_PUBLISHABLE_KEY).</p>
@@ -52,8 +53,10 @@
     <p class="muted">Optional: save a card and your share —
     usually around
     {{ event.estimated_share_cents | dollars }} — is charged
-    automatically after the game. No card? You'll get a
-    tap-to-pay link instead.</p>
+    automatically after the game.
+    You're only charged if you play — marked absent means
+    nothing is charged. No card? You'll get a tap-to-pay link
+    instead.</p>
     <button id="add-card">Add a card</button>
     <div id="card-form" hidden>
       <div id="payment-element"></div>

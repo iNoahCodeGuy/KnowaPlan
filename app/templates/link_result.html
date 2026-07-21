@@ -12,7 +12,8 @@
 {{ (amount_cents or 0) | dollars }} — shown once; re-mint from
 the roster if you lose it:</p>
 <p><code>{{ link_url }}</code></p>
-<p><a href="sms:{{ attendee.phone }}?body={{
+{# Same iOS sms: form as settle_report — +1 E.164, &body. #}
+<p><a href="sms:+1{{ attendee.phone }}&body={{
   ('Your share for ' ~ event.title ~ ': ' ~
    ((amount_cents or 0) | dollars) ~
    '. Pay here: ' ~ link_url) | urlencode }}">Text it from your
