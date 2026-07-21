@@ -1,0 +1,2017 @@
+[
+ {
+  "name": "01-create-empty",
+  "url": "http://127.0.0.1:8000/",
+  "caption": "Create form, untouched",
+  "journey": "Create & gates",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "input",
+    "label": "planner_name",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 141
+   },
+   {
+    "tag": "input",
+    "label": "planner_phone",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 219
+   },
+   {
+    "tag": "input",
+    "label": "title",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 297
+   },
+   {
+    "tag": "input",
+    "label": "starts_at",
+    "w": 320,
+    "h": 41,
+    "x": 35,
+    "y": 374
+   },
+   {
+    "tag": "input",
+    "label": "total_cost_dollars",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 454
+   },
+   {
+    "tag": "input",
+    "label": "goal_attendance",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 532
+   },
+   {
+    "tag": "input",
+    "label": "payment_handles",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 630
+   },
+   {
+    "tag": "input",
+    "label": "create_password",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 708
+   },
+   {
+    "tag": "select",
+    "label": "Assume everyone going attended (charge their shares)\nMark un",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 786
+   },
+   {
+    "tag": "button",
+    "label": "Create event",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 842
+   }
+  ]
+ },
+ {
+  "name": "02-create-wrong-password",
+  "url": "http://127.0.0.1:8000/events",
+  "caption": "Wrong create password \u2192 400 re-render",
+  "journey": "Create & gates",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "input",
+    "label": "Noah",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 208
+   },
+   {
+    "tag": "input",
+    "label": "6195550100",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 286
+   },
+   {
+    "tag": "input",
+    "label": "Tuesday Pickleball",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 364
+   },
+   {
+    "tag": "input",
+    "label": "2026-07-28T18:00",
+    "w": 320,
+    "h": 41,
+    "x": 35,
+    "y": 441
+   },
+   {
+    "tag": "input",
+    "label": "120",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 521
+   },
+   {
+    "tag": "input",
+    "label": "6",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 599
+   },
+   {
+    "tag": "input",
+    "label": "Venmo @noah-k \u00b7 Zelle 619-555-0100",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 697
+   },
+   {
+    "tag": "input",
+    "label": "create_password",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 775
+   },
+   {
+    "tag": "select",
+    "label": "Assume everyone going attended (charge their shares)\nMark un",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 852
+   },
+   {
+    "tag": "button",
+    "label": "Create event",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 909
+   }
+  ]
+ },
+ {
+  "name": "03-create-bad-phone",
+  "url": "http://127.0.0.1:8000/events",
+  "caption": "11-digit-rule phone hint on create",
+  "journey": "Create & gates",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "input",
+    "label": "Noah",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 231
+   },
+   {
+    "tag": "input",
+    "label": "555-12",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 309
+   },
+   {
+    "tag": "input",
+    "label": "Tuesday Pickleball",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 387
+   },
+   {
+    "tag": "input",
+    "label": "2026-07-28T18:00",
+    "w": 320,
+    "h": 41,
+    "x": 35,
+    "y": 464
+   },
+   {
+    "tag": "input",
+    "label": "120",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 544
+   },
+   {
+    "tag": "input",
+    "label": "6",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 622
+   },
+   {
+    "tag": "input",
+    "label": "Venmo @noah-k \u00b7 Zelle 619-555-0100",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 720
+   },
+   {
+    "tag": "input",
+    "label": "create_password",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 798
+   },
+   {
+    "tag": "select",
+    "label": "Assume everyone going attended (charge their shares)\nMark un",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 876
+   },
+   {
+    "tag": "button",
+    "label": "Create event",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 932
+   }
+  ]
+ },
+ {
+  "name": "04-paid",
+  "url": "http://127.0.0.1:8000/paid",
+  "caption": "Static Stripe-success landing",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "05-not-found",
+  "url": "http://127.0.0.1:8000/admin/deadbeefdeadbeef0000",
+  "caption": "Uniform friendly 404 (bad token)",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 209
+   }
+  ]
+ },
+ {
+  "name": "06-admin-draft",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Admin page in draft",
+  "journey": "Planner journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Open RSVPs",
+    "w": 139,
+    "h": 40,
+    "x": 16,
+    "y": 159
+   },
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 393
+   }
+  ]
+ },
+ {
+  "name": "07-error-draft-settle",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/settle",
+  "caption": "error.html: settle preview on a draft event",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 130
+   }
+  ]
+ },
+ {
+  "name": "08-event-page-draft",
+  "url": "http://127.0.0.1:8000/e/3rBzDXK4gyPDojYwXQqDLA",
+  "caption": "/e/ before RSVPs open",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "09-admin-open-empty",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Admin open, empty roster ('Nobody yet')",
+  "journey": "Planner journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Settle up",
+    "w": 108,
+    "h": 40,
+    "x": 16,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Close RSVPs",
+    "w": 141,
+    "h": 40,
+    "x": 134,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Cancel event\u2026",
+    "w": 156,
+    "h": 40,
+    "x": 16,
+    "y": 205
+   },
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 382
+   }
+  ]
+ },
+ {
+  "name": "10-event-page-open",
+  "url": "http://127.0.0.1:8000/e/3rBzDXK4gyPDojYwXQqDLA",
+  "caption": "/e/ identify form",
+  "journey": "Attendee journey",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "input",
+    "label": "name",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 286
+   },
+   {
+    "tag": "input",
+    "label": "phone",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 364
+   },
+   {
+    "tag": "button",
+    "label": "RSVP",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 419
+   }
+  ]
+ },
+ {
+  "name": "11-event-page-bad-phone",
+  "url": "http://127.0.0.1:8000/e/3rBzDXK4gyPDojYwXQqDLA/rsvp",
+  "caption": "Bad phone on /e/ identify",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "input",
+    "label": "Test",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 373
+   },
+   {
+    "tag": "input",
+    "label": "555-0199",
+    "w": 320,
+    "h": 39,
+    "x": 35,
+    "y": 451
+   },
+   {
+    "tag": "button",
+    "label": "RSVP",
+    "w": 320,
+    "h": 40,
+    "x": 35,
+    "y": 506
+   }
+  ]
+ },
+ {
+  "name": "12-rsvp-pending",
+  "url": "http://127.0.0.1:8000/r/u7uHCuerU5nU8zyMDMb43g",
+  "caption": "/r/ pending: all three answers",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Going",
+    "w": 87,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Maybe",
+    "w": 91,
+    "h": 40,
+    "x": 108,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Can't make it",
+    "w": 140,
+    "h": 40,
+    "x": 204,
+    "y": 213
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 269
+   }
+  ]
+ },
+ {
+  "name": "13-rsvp-going-card-offer",
+  "url": "http://127.0.0.1:8000/r/u7uHCuerU5nU8zyMDMb43g",
+  "caption": "/r/ going + optional card pitch",
+  "journey": "Attendee journey",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Maybe",
+    "w": 91,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Can't make it",
+    "w": 140,
+    "h": 40,
+    "x": 112,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Add a card",
+    "w": 123,
+    "h": 40,
+    "x": 16,
+    "y": 455
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 511
+   }
+  ]
+ },
+ {
+  "name": "14-rsvp-card-island-502",
+  "url": "http://127.0.0.1:8000/r/TxvwxHAprlnxu41VyqlQ3Q",
+  "caption": "Card island failure with Stripe unreachable",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Maybe",
+    "w": 91,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Can't make it",
+    "w": 140,
+    "h": 40,
+    "x": 112,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Add a card",
+    "w": 123,
+    "h": 40,
+    "x": 16,
+    "y": 455
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 576
+   }
+  ]
+ },
+ {
+  "name": "15-rsvp-card-on-file",
+  "url": "http://127.0.0.1:8000/r/TxvwxHAprlnxu41VyqlQ3Q",
+  "caption": "'card on file' badge replaces the island",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Maybe",
+    "w": 91,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Can't make it",
+    "w": 140,
+    "h": 40,
+    "x": 112,
+    "y": 213
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 432
+   }
+  ]
+ },
+ {
+  "name": "16-settle-preview-blocked-sub50",
+  "url": "http://127.0.0.1:8000/admin/bYZk-3wJQIZp5MFxEMW9xQ/settle",
+  "caption": "Sub-50\u00a2 share blocks settling",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 513
+   }
+  ]
+ },
+ {
+  "name": "17-rsvp-maybe",
+  "url": "http://127.0.0.1:8000/r/a2trOYBoTKRwe1F-JtnD5Q",
+  "caption": "/r/ maybe state",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Going",
+    "w": 87,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Can't make it",
+    "w": 140,
+    "h": 40,
+    "x": 108,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Add a card",
+    "w": 123,
+    "h": 40,
+    "x": 16,
+    "y": 455
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 511
+   }
+  ]
+ },
+ {
+  "name": "18-rsvp-declined",
+  "url": "http://127.0.0.1:8000/r/BmQeX3i7T5Y__s5P-GUg-A",
+  "caption": "/r/ declined state",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Going",
+    "w": 87,
+    "h": 40,
+    "x": 16,
+    "y": 213
+   },
+   {
+    "tag": "button",
+    "label": "Maybe",
+    "w": 91,
+    "h": 40,
+    "x": 108,
+    "y": 213
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 269
+   }
+  ]
+ },
+ {
+  "name": "19-me-populated",
+  "url": "http://127.0.0.1:8000/me/-HNq7qKASGZ_rIZn7XA5KQ",
+  "caption": "'Your events' with one open event",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "20-admin-roster-open",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Roster: every badge type, share link, actions",
+  "journey": "Planner journey",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Settle up",
+    "w": 108,
+    "h": 40,
+    "x": 16,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Close RSVPs",
+    "w": 141,
+    "h": 40,
+    "x": 134,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Cancel event\u2026",
+    "w": 156,
+    "h": 40,
+    "x": 16,
+    "y": 205
+   },
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 382
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 599
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 599
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 904
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 904
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 1210
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 1210
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 1539
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 1539
+   }
+  ]
+ },
+ {
+  "name": "21-settle-preview-open-warnings",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/settle",
+  "caption": "Preview while open: unmarked + maybe warnings, cap math",
+  "journey": "Settle & money",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Charge actual shares ($24.00 each)",
+    "w": 358,
+    "h": 40,
+    "x": 16,
+    "y": 629
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 757
+   }
+  ]
+ },
+ {
+  "name": "22-admin-closed-autoclose",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "After first attendance mark: silently closed",
+  "journey": "Planner journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Settle up",
+    "w": 108,
+    "h": 40,
+    "x": 16,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Cancel event\u2026",
+    "w": 156,
+    "h": 40,
+    "x": 134,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 327
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 543
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 543
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 849
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 849
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 1154
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 1154
+   },
+   {
+    "tag": "button",
+    "label": "present",
+    "w": 158,
+    "h": 38,
+    "x": 32,
+    "y": 1331
+   },
+   {
+    "tag": "button",
+    "label": "absent",
+    "w": 158,
+    "h": 38,
+    "x": 200,
+    "y": 1331
+   }
+  ]
+ },
+ {
+  "name": "23-error-409-respond-after-close",
+  "url": "http://127.0.0.1:8000/r/a2trOYBoTKRwe1F-JtnD5Q/respond",
+  "caption": "Stale tab answers after close \u2192 409",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 153
+   }
+  ]
+ },
+ {
+  "name": "24-event-page-closed",
+  "url": "http://127.0.0.1:8000/e/3rBzDXK4gyPDojYwXQqDLA",
+  "caption": "/e/ after close",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "25-me-mixed-closed",
+  "url": "http://127.0.0.1:8000/me/CHGRgqRB9M3q6kEUWSd1LA",
+  "caption": "'Your events': closed chip + open event",
+  "journey": "Attendee journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "26-admin-roster-marked",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Roster fully marked (present/absent)",
+  "journey": "Planner journey",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Settle up",
+    "w": 108,
+    "h": 40,
+    "x": 16,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Cancel event\u2026",
+    "w": 156,
+    "h": 40,
+    "x": 134,
+    "y": 150
+   },
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 327
+   }
+  ]
+ },
+ {
+  "name": "27-settle-preview-closed-cap",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/settle",
+  "caption": "Preview closed: $30 true vs $20 estimate, cap choice",
+  "journey": "Settle & money",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Charge actual shares ($30.00 each)",
+    "w": 358,
+    "h": 40,
+    "x": 16,
+    "y": 459
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 587
+   }
+  ]
+ },
+ {
+  "name": "28-settle-submitting",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/settle",
+  "caption": "Mid-submit: data-wait message (best-effort race)",
+  "journey": "Settle & money",
+  "fold": false
+ },
+ {
+  "name": "29-settle-report-cap",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/settle",
+  "caption": "Settle report (cap): absorbing $30; dangling + unpaid rows",
+  "journey": "Settle & money",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 32,
+    "y": 381
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 32,
+    "y": 496
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 568
+   }
+  ]
+ },
+ {
+  "name": "30-admin-roster-post-settle",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Roster post-settle: unconfirmed charge, unpaid rows",
+  "journey": "Settle & money",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 459
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 507
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 811
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1093
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1141
+   }
+  ]
+ },
+ {
+  "name": "31-rsvp-settled-dangling-invisible",
+  "url": "http://127.0.0.1:8000/r/TxvwxHAprlnxu41VyqlQ3Q",
+  "caption": "Dana (dangling charge): page shows no payment info",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 238
+   }
+  ]
+ },
+ {
+  "name": "32-rsvp-settled-unpaid-claim-offer",
+  "url": "http://127.0.0.1:8000/r/bGpUkrtfRErVegiN7v1YMQ",
+  "caption": "Ben unpaid: share, handles, 'I paid directly'",
+  "journey": "Settle & money",
+  "fold": true,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "select",
+    "label": "Venmo\nZelle\nApple Cash\nCash\nOther",
+    "w": 358,
+    "h": 40,
+    "x": 16,
+    "y": 361
+   },
+   {
+    "tag": "button",
+    "label": "I paid Noah directly",
+    "w": 188,
+    "h": 40,
+    "x": 16,
+    "y": 417
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 473
+   }
+  ]
+ },
+ {
+  "name": "33-rsvp-claim-waiting",
+  "url": "http://127.0.0.1:8000/r/bGpUkrtfRErVegiN7v1YMQ",
+  "caption": "After claim: waiting on planner confirm",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 356
+   }
+  ]
+ },
+ {
+  "name": "34-admin-claim-chip",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Roster: 'says they paid \u2014 venmo' + confirm/deny",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 459
+   },
+   {
+    "tag": "button",
+    "label": "They paid me \u2713",
+    "w": 156,
+    "h": 40,
+    "x": 32,
+    "y": 537
+   },
+   {
+    "tag": "button",
+    "label": "Didn't get it",
+    "w": 123,
+    "h": 38,
+    "x": 193,
+    "y": 539
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 851
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1132
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1180
+   }
+  ]
+ },
+ {
+  "name": "35-admin-claim-rejected",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Claim rejected: chip cleared",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 459
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 507
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 811
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1093
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1141
+   }
+  ]
+ },
+ {
+  "name": "36-admin-paid-direct",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Confirmed direct payment: paid ($20.00 direct)",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 740
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1022
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1069
+   }
+  ]
+ },
+ {
+  "name": "37-rsvp-marked-paid-direct",
+  "url": "http://127.0.0.1:8000/r/bGpUkrtfRErVegiN7v1YMQ",
+  "caption": "Ben: 'marked you paid \u2713'",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 302
+   }
+  ]
+ },
+ {
+  "name": "38-error-502-retry-dangling",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/retry/1",
+  "caption": "Retry dangling with Stripe down: 502 + idempotency copy",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 199
+   }
+  ]
+ },
+ {
+  "name": "39-admin-poll-failed",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Roster: 'payment status unknown \u2014 retry later'",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 740
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1022
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1069
+   }
+  ]
+ },
+ {
+  "name": "40-error-502-fresh-link",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/link/3",
+  "caption": "Fresh link with Stripe down: 502",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 130
+   }
+  ]
+ },
+ {
+  "name": "41-rsvp-settled-maybe",
+  "url": "http://127.0.0.1:8000/r/a2trOYBoTKRwe1F-JtnD5Q",
+  "caption": "Chloe (stale maybe) after settle",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 238
+   }
+  ]
+ },
+ {
+  "name": "42-rsvp-settled-no-show",
+  "url": "http://127.0.0.1:8000/r/iehmtr1S6oqfvd4QmIr0kQ",
+  "caption": "Gio marked absent: \"you're didn't play\"",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 238
+   }
+  ]
+ },
+ {
+  "name": "43-rsvp-settled-planner-self",
+  "url": "http://127.0.0.1:8000/r/u7uHCuerU5nU8zyMDMb43g",
+  "caption": "Planner's own attendee page after settle",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 238
+   }
+  ]
+ },
+ {
+  "name": "44-event-page-settled",
+  "url": "http://127.0.0.1:8000/e/3rBzDXK4gyPDojYwXQqDLA",
+  "caption": "/e/ after settle",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "45-me-empty",
+  "url": "http://127.0.0.1:8000/me/-HNq7qKASGZ_rIZn7XA5KQ",
+  "caption": "'Your events' empty state (only event settled)",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "46-admin-settled",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ",
+  "caption": "Admin page, settled",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   },
+   {
+    "tag": "button",
+    "label": "Retry charge",
+    "w": 134,
+    "h": 38,
+    "x": 32,
+    "y": 740
+   },
+   {
+    "tag": "button",
+    "label": "Get fresh link",
+    "w": 138,
+    "h": 38,
+    "x": 161,
+    "y": 1022
+   },
+   {
+    "tag": "button",
+    "label": "Mark paid \u2014 paid me directly",
+    "w": 257,
+    "h": 38,
+    "x": 32,
+    "y": 1069
+   }
+  ]
+ },
+ {
+  "name": "47-cancel-confirm-on-settled",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/cancel",
+  "caption": "Cancel confirm renders on a SETTLED event",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Yes \u2014 cancel the event",
+    "w": 218,
+    "h": 40,
+    "x": 16,
+    "y": 280
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 337
+   }
+  ]
+ },
+ {
+  "name": "48-error-cancel-after-money",
+  "url": "http://127.0.0.1:8000/admin/fwKdgpOozbmZmZRj854NpQ/cancel",
+  "caption": "Cancel refused: money already moved",
+  "journey": "Errors & edges",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2190 Go back",
+    "w": 91,
+    "h": 19,
+    "x": 16,
+    "y": 176
+   }
+  ]
+ },
+ {
+  "name": "49-settle-preview-zero-participants",
+  "url": "http://127.0.0.1:8000/admin/IGjhfx-hBlnHr0MUb01z3w/settle",
+  "caption": "mark_all_absent default: settling charges nobody",
+  "journey": "Settle & money",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Settle now",
+    "w": 358,
+    "h": 40,
+    "x": 16,
+    "y": 374
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 431
+   }
+  ]
+ },
+ {
+  "name": "50-cancel-confirm",
+  "url": "http://127.0.0.1:8000/admin/IGjhfx-hBlnHr0MUb01z3w/cancel",
+  "caption": "Cancel confirm (pristine event)",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Event home",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "button",
+    "label": "Yes \u2014 cancel the event",
+    "w": 218,
+    "h": 40,
+    "x": 16,
+    "y": 280
+   },
+   {
+    "tag": "a",
+    "label": "Back to the roster",
+    "w": 163,
+    "h": 19,
+    "x": 16,
+    "y": 337
+   }
+  ]
+ },
+ {
+  "name": "51-admin-cancelled",
+  "url": "http://127.0.0.1:8000/admin/IGjhfx-hBlnHr0MUb01z3w",
+  "caption": "Admin page, cancelled",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "button",
+    "label": "Copy",
+    "w": 81,
+    "h": 40,
+    "x": 16,
+    "y": 266
+   }
+  ]
+ },
+ {
+  "name": "52-event-page-cancelled",
+  "url": "http://127.0.0.1:8000/e/Fp1PBcMu_iAlk78CZj-B0A",
+  "caption": "/e/ cancelled",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": []
+ },
+ {
+  "name": "53-rsvp-cancelled",
+  "url": "http://127.0.0.1:8000/r/F_h3QVNm0tK8iO7qJaLcrA",
+  "caption": "/r/ on a cancelled event",
+  "journey": "Terminal states",
+  "fold": false,
+  "scrollWidth": 390,
+  "clientWidth": 390,
+  "overflowPx": 0,
+  "smallTargets": [
+   {
+    "tag": "a",
+    "label": "\u2302 Your events",
+    "w": 111,
+    "h": 16,
+    "x": 16,
+    "y": 26
+   },
+   {
+    "tag": "a",
+    "label": "Your events",
+    "w": 96,
+    "h": 16,
+    "x": 16,
+    "y": 261
+   }
+  ]
+ }
+]
