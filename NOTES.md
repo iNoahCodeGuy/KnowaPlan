@@ -259,9 +259,17 @@ at slots 4/4/4/3, the single right one at slot 1).
   NOT assert button labels I couldn't verify — docs.stripe.com is
   egress-blocked this session; see RESOURCES note).
 - check_quiz.py: CONTRACT OK — words equal within each question, answer
-  slots [2,3,1,4] (no bias). **Quiz UNVERIFIED — ask for the score.** No
-  learning record written: nothing was demonstrated yet, only built
-  (LEARNING-RECORD-FORMAT: coverage ≠ learning).
+  slots [2,3,1,4] (no bias).
+- **Quiz result: 1/4.** Picks: Q1 "back on card", Q2 "connected account
+  is short" (direction inverted), Q4 "wait for it automatically"; only Q3
+  (the two-planner consequence) right. Same concept→mechanism seam
+  (records 0004/0005) in the money topology, plus a live
+  reversal-is-automatic belief — the exact one behind the 7/21 stranded
+  transfers. Diagnosis + re-teach plan in **learning-records/0009**.
+  Root: he's tracking one pile of money, not three accounts. Re-ground
+  before any new topic; confirm with a fresh retrieval check. Mild
+  slot-1 tendency noted (3/4 picks slot 1) but not over-read — Q2 was a
+  content-driven slot-4 pick.
 - Map updated: the → three-accounts row flipped to ✓ Lesson 7; the "two
   transfers awaiting reversal" open item now points at the lesson's
   action and clears when he reverses both.
