@@ -513,3 +513,68 @@ create_all never ALTERs (demo.md reset).
 **Pinned by:** test_stripe_id_columns_hold_real_stripe_ids in
 tests/test_app.py — introspects DECLARED capacity, so it holds on
 SQLite too.
+
+## 2026-07-21: Attendee "your events" page — view-only capability link
+**Context:** attendees need a cross-event "my upcoming events" view
+before 7/29, but no-accounts (2026-07-13) means no cross-event
+credential exists — deliberately (2026-07-16 made rsvp_token
+per-event so one leaked link touches one event).
+**Alternatives:** (a) phone lookup, unverified — anyone typing any
+number sees that person's schedule; refused, privacy hole. (b)
+phone + SMS code — drags SMS sending into v0. (d) accounts — the
+strangers-milestone answer.
+**Chose:** (c) attendees.attendee_token — fourth capability token,
+same minting, one column per purpose — opening GET /me/{token}:
+open+closed events only, sorted by starts_at, linked from every
+/r/ page. VIEW-ONLY is the load-bearing choice: no /r/ token or
+link ever renders (pinned by test), so a leaked bookmark widens
+what a holder SEES (your schedule) but not what they can DO
+(nothing). Changing an answer still requires that event's own /r/
+link — the 2026-07-16 containment stands.
+**Why open+closed only:** a settled event on this page would beg
+for a "pay now" button — deferred post-7/29; and the filter is by
+STATE, not clock, because starts_at is display-only in v0.
+**Locks in:** new column ⇒ the deployed DB's one planned
+drop/recreate now rides the post-$1-test deploy; /me/ never grows
+a money surface without a new decision.
+
+## 2026-07-21: Direct payment — claim-flag, planner confirm, link-kill
+**Context:** courtside reality pays by Venmo/Zelle/cash; without a
+way to record it the roster lies (unpaid forever or a false
+`abandoned`). In-app payment stays; this adds recording, not rails.
+**Chose:** planner handles as free text (display-only, never
+parsed); attendee claim = claimed_at/claimed_via FLAG on the
+unpaid row, never a state — the roster counts a claim as owed
+(never assume collected) until the planner's confirm performs the
+existing unpaid → paid transition. mark_paid_direct expires any
+live Checkout link BEFORE the state write — the INVERSE of
+record-first, because the call destroys a collection path instead
+of creating one (crash after expire: unpaid row + dead link,
+re-mint recovers; the reverse invites double-pay) — and REFUSES
+if the stored link already collected (the roster poll records it).
+paid_direct_at distinguishes these rows forever: charged_cents
+stays None, and the Stripe refund path never applies — planner
+reverses out-of-band.
+**Over-collection (the one visible case):** Stripe-paid + claim
+still set — the claim deliberately survives the poll flip —
+bannered to planner and attendee with "refund one" instructions.
+No auto-resolution: that is refund code, and it stays guarded.
+
+## 2026-07-21: Phone canonicalization — strict 10-digit identity
+**Context:** identity in v0 IS the phone (2026-07-13), but every
+lookup was exact-string: iOS autofill "(619) 555-0123" vs typed
+digits minted a duplicate attendee (orphaning any saved card) and
+could dodge the never-charge-the-planner match — settle would
+charge the planner's own card. Both nearly bitten in the 7/21
+live test (planner phone typed as an attendee row; an 11-digit
+typo stored silently).
+**Chose:** normalize_phone (app/phone.py): strip non-digits, drop
+a leading US "1" on 11 digits, REQUIRE exactly 10 — reject at the
+form with a fix-it hint. Applied at every store and compare:
+create_event, get_or_create_rsvp, both sides of the planner
+auto-link. Strict beats lenient: a typo caught at the form beats
+a wrong identity at settle; v0 is one US metro.
+**Accepted risk:** a shared-phone couple still collapses into one
+attendee (divisor undercounts). Deferred on purpose — the 7/29
+invite says "each person uses their own number"; a
+confirm-identity step is a post-7/29 fork.

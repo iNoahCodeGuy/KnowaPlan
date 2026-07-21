@@ -38,7 +38,10 @@ If they played, have them tap Going on their own link
 {% endif %}
 
 <form class="settle-choices" method="post"
-      action="/admin/{{ event.admin_token }}/settle">
+      action="/admin/{{ event.admin_token }}/settle"
+      data-wait="Settling {{ participants }}
+{{ 'person' if participants == 1 else 'people' }} — keep this
+page open until the report loads.">
 {% if over_estimate %}
   <p>The true share ({{ share | dollars }}) is higher than the
   estimate ({{ event.estimated_share_cents | dollars }}). Your

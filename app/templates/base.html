@@ -194,5 +194,32 @@
    app knows who you are only by the URL you hold. #}
 {% block home %}{% endblock %}
 {% block content %}{% endblock %}
+<script>
+// Submit guard: every POST here is non-idempotent (settle,
+// link mint, mark-paid...), so a double-tap must find dead
+// buttons — the phone-walk double-settle 500 (2026-07-19)
+// becomes impossible instead of runbook folklore. Disabling is
+// DEFERRED one tick: buttons carry name/value the routes
+// require (mode, choice, present), and disabling synchronously
+// on submit drops the clicked value from the POST in some
+// browsers. data-wait="..." on a form also reveals that message
+// (the settle freeze reads as working, not broken).
+document.addEventListener("submit", function (e) {
+  var form = e.target;
+  setTimeout(function () {
+    var buttons = form.querySelectorAll("button");
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].disabled = true;
+    }
+  }, 0);
+  var wait = form.getAttribute("data-wait");
+  if (wait && !form.querySelector(".wait")) {
+    var p = document.createElement("p");
+    p.className = "muted wait";
+    p.textContent = wait;
+    form.appendChild(p);
+  }
+});
+</script>
 </body>
 </html>
