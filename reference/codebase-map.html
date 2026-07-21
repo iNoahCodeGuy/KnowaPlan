@@ -10,35 +10,46 @@
 
 <h1>The KnowaPlan map</h1>
 <p class="subtitle">Reference · what a developer needs to know ·
-grounded in the code as of 2026-07-17</p>
+grounded in the code as of 2026-07-21</p>
 
 <p>KnowaPlan splits a fixed cost (a pickleball court) across whoever
 actually shows up. Attendees RSVP through capability URLs — no
 accounts — and optionally save a card; at close the planner marks
 attendance and each present attendee's true share is charged from
-their saved card or collected via a tap-to-pay link. No holds, no
-webhooks, no background jobs in v0. It custodies real money, so
-correctness beats speed everywhere.</p>
+their saved card, collected via a tap-to-pay link, or recorded as
+paid directly (Venmo/Zelle/cash) once the planner confirms it. No
+holds, no webhooks, no background jobs in v0. It custodies real
+money, so correctness beats speed everywhere.</p>
+
+<div class="callout">
+  <span class="label">Live status, 2026-07-21</span>
+  Both money legs are <strong>verified against live Stripe with real
+  cards</strong>: a saved-card auto-charge ($1.00) and a tap-to-pay
+  link ($1.66), both reading <code>KNOWAPLAN SPLIT</code> on the
+  statement, both transferred to the connected account, the roster
+  poll observed flipping <code>unpaid → paid</code> in production.
+  First real event: the pickleball club, 2026-07-29.
+</div>
 
 <h2 id="layers">The four layers and the one rule</h2>
 
-<pre><code>  browser (form POST, one JS island on /r/)
+<pre><code>  browser (form POST, one JS island on /r/, one submit guard)
       │
   ┌───▼──────────────────────────────────────────────┐
   │ EDGE      app/web.py + templates/   app/main.py  │  token → row,
-  │           (926 lines, every route)               │  form → service
+  │           (1,149 lines, every route)             │  form → service
   ├───▼──────────────────────────────────────────────┤
   │ SERVICES  app/rsvps.py  app/events.py            │  the ONLY place
   │           app/settlement.py                      │  business flow +
   │                                                  │  commits live
   ├───▼──────────────────────────────────────────────┤
-  │ MONEY     app/payments.py                        │  the ONLY file
+  │ MONEY     app/payments.py      app/fees.py       │  the ONLY file
   │                                  ──► Stripe API  │  that calls Stripe
   ├───▼──────────────────────────────────────────────┤
   │ MEMORY    app/models.py          ──► Postgres    │  rows remember;
   │ LAW       app/state_machines.py                  │  tables legislate
   └──────────────────────────────────────────────────┘
-    plumbing: app/db.py  app/config.py  app/bootstrap.py</code></pre>
+   plumbing: app/db.py  app/config.py  app/bootstrap.py  app/phone.py</code></pre>
 
 <div class="callout">
   <span class="label">The one rule that makes the invariants enforceable</span>
@@ -66,9 +77,17 @@ correctness beats speed everywhere.</p>
     Stripe-id bookkeeping (after a card save or link poll).</td></tr>
 <tr><td><a href="../app/rsvps.py">rsvps.py</a></td>
     <td>RSVP service: <code>get_or_create_rsvp</code> (the /e/ entry —
-    find-or-create by phone, mints the /r/ token, auto-links a playing
-    planner), <code>respond</code>, <code>allowed_choices</code> (UI
-    can never offer an illegal move).</td></tr>
+    find-or-create by <em>canonicalized</em> phone, mints the /r/ token,
+    auto-links a playing planner), <code>respond</code>,
+    <code>allowed_choices</code> (UI can never offer an illegal move —
+    under the uniform rule every answer offers the other two).</td></tr>
+<tr><td><a href="../app/phone.py">phone.py</a></td>
+    <td>One pure function, <code>normalize_phone</code>: strip
+    non-digits, drop a leading US <code>1</code>, require exactly 10.
+    Identity IS the phone, so every store and compare goes through it —
+    autofill's <code>(619) 555-0123</code> and typed digits must be one
+    person, or a duplicate orphans a saved card and can dodge the
+    never-charge-the-planner match. (2026-07-21)</td></tr>
 <tr><td><a href="../app/events.py">events.py</a></td>
     <td>Pre-money event writes: <code>open_rsvps</code> (draft→open),
     <code>cancel_event</code> — refuses if ANY Payment row left
@@ -78,18 +97,30 @@ correctness beats speed everywhere.</p>
     <code>close_rsvps</code>, <code>settle_event</code> (close → floor
     split → skip planner → stamp intent in ONE commit → charge/link
     per attendee, failures contained per attendee),
-    <code>retry_dangling</code> (stamped amount, same idempotency key).</td></tr>
+    <code>retry_dangling</code> (stamped amount, same idempotency key).
+    Refuses outright if a nonzero per-person share is under Stripe's
+    50¢ floor — before any stamp.</td></tr>
 <tr><td><a href="../app/payments.py">payments.py</a></td>
     <td>The only Stripe call surface: save card (SetupIntent),
     <code>charge_share</code> (off-session PI, fires from
     <code>none</code> only), <code>create_payment_link</code> /
     <code>poll_link_status</code> (Checkout Session, one payable link
-    per row), <code>refund_charge</code> — a guarded stub until
-    walk-ins ship.</td></tr>
+    per row), <code>mark_paid_direct</code> (planner-confirmed
+    Venmo/Zelle/cash — kills any live link BEFORE the state write),
+    <code>refund_charge</code> — a guarded stub until walk-ins ship.</td></tr>
+<tr><td><a href="../app/fees.py">fees.py</a></td>
+    <td>Pure integer arithmetic for the Stripe-fee gross-up — no
+    Stripe calls, no DB. Bodies are still stubs; the property tests
+    are <code>xfail(strict)</code> so the step stays visibly open.
+    See open items.</td></tr>
 <tr><td><a href="../app/models.py">models.py</a></td>
-    <td>Five tables: Planner, Attendee, Event, Rsvp, Payment. Tokens
-    minted by column default (an insert cannot forget). The DB stores
-    state; it does not enforce transitions.</td></tr>
+    <td>Five tables: Planner, Attendee, Event, Rsvp, Payment. FOUR
+    token columns, minted by column default (an insert cannot forget).
+    Payment also carries the direct-payment fields
+    (<code>claimed_at</code>/<code>claimed_via</code> = an attendee's
+    unverified claim; <code>paid_direct_at</code> = the planner's
+    confirmation). The DB stores state; it does not enforce
+    transitions.</td></tr>
 <tr><td><a href="../app/state_machines.py">state_machines.py</a></td>
     <td>Pure data — the transition tables transcribed from
     state_machines.md, plus <code>can_transition()</code>. No behavior.
@@ -117,8 +148,10 @@ correctness beats speed everywhere.</p>
 
 <h2 id="urls">The URLs, grouped by credential</h2>
 
-<p>Three capability tokens, one per purpose, each route querying ONLY
-its own column — cross-purpose reuse is structurally impossible.</p>
+<p>Four capability tokens, one per purpose, each route querying ONLY
+its own column — cross-purpose reuse is structurally impossible. No
+page ever links across a token boundary, so each page's "home" is
+whatever its own token already proves.</p>
 
 <table class="ref">
 <tbody>
@@ -130,14 +163,22 @@ its own column — cross-purpose reuse is structurally impossible.</p>
     <td>view event · <code>POST …/rsvp</code> starts an RSVP by name +
     phone (re-entering a known phone recovers a lost /r/ link)</td></tr>
 <tr><td><strong>/r/{rsvp_token}</strong><br>per attendee <em>per event</em></td>
-    <td>answer page (buttons derived from the transition table) ·
-    <code>POST …/respond</code> · <code>POST …/setup-intent</code>
-    (lazy Payment Element island — card save is optional)</td></tr>
+    <td>answer page (buttons derived from the transition table; polls
+    its own outstanding link on load) · <code>POST …/respond</code> ·
+    <code>POST …/setup-intent</code> (lazy Payment Element island —
+    card save is optional) · <code>POST …/claim</code> ("I paid the
+    planner directly" — a flag, never a state)</td></tr>
+<tr><td><strong>/me/{attendee_token}</strong><br>per attendee, <em>all</em> events</td>
+    <td>their open + closed events, sorted by start. <strong>VIEW-ONLY
+    by contract</strong> — no /r/ token or link ever renders, pinned by
+    test, so a leaked bookmark widens what a holder SEES, never what
+    they can DO. (2026-07-21)</td></tr>
 <tr><td><strong>/admin/{admin_token}</strong><br>whoever holds it IS the planner</td>
     <td>roster (polls outstanding links on load) · open · close ·
     attendance · settle preview/settle (mode explicit: actual, or cap
     shown only when actual &gt; estimate) · cancel · retry dangling ·
-    fresh link</td></tr>
+    fresh link · <code>POST …/mark-paid/{id}</code> ·
+    <code>POST …/claim-reject/{id}</code></td></tr>
 </tbody>
 </table>
 
@@ -148,13 +189,16 @@ its own column — cross-purpose reuse is structurally impossible.</p>
 <tr><td>Event</td><td>draft → open → closed → settled → archived;
     open|closed → cancelled. Close is manual or settle-triggered —
     never tied to start time.</td></tr>
-<tr><td>RSVP</td><td>pending → going|maybe|declined; maybe →
-    going|declined; declined → going (while open); going →
-    attended|no_show (planner's writes).</td></tr>
+<tr><td>RSVP</td><td>pending → any answer; and <strong>any answer ↔ any
+    answer while the event is open</strong> (uniform rule, 2026-07-21 —
+    "backing out is planner territory" was a hold-era fossil). going →
+    attended|no_show stays the planner's write at settlement.</td></tr>
 <tr><td>Payment</td><td>none → paid | unpaid; unpaid → paid |
     abandoned; paid → refunded. No holds — <code>authorized</code>,
     <code>voided</code>, <code>auth_failed</code> died with the
-    2026-07-15 pivot.</td></tr>
+    2026-07-15 pivot. <code>unpaid → paid</code> now has three
+    triggers: the link pays, the poll records it, or the planner
+    confirms a direct payment.</td></tr>
 <tr><td>Attendance</td><td>unconfirmed → present | absent, resolved at
     settlement. Lives on the Rsvp row (same grain).</td></tr>
 </tbody>
@@ -191,7 +235,29 @@ to a <a href="../decisions.md">decisions.md</a> entry.</p>
     estimate snapshot) is an active planner choice; silence never
     absorbs. (2026-07-15, -16)</td></tr>
 <tr><td>Refund = reversal of collected money, only</td><td>Enforced by
-    the money_guard hook, not prose. Stub until walk-ins.</td></tr>
+    the money_guard hook, not prose. Stub until walk-ins. A
+    <em>direct</em> payment can't be refunded through Stripe at all —
+    the planner reverses it out-of-band.</td></tr>
+<tr><td>A claim is not a payment</td><td>An attendee saying "I paid you
+    on Venmo" sets a flag and leaves the row <code>unpaid</code> — the
+    roster keeps counting it as owed until the planner confirms.
+    Never assume collected. (2026-07-21)</td></tr>
+<tr><td>Kill the link before saying paid</td><td><code>mark_paid_direct</code>
+    expires any live Checkout session BEFORE the state write — the
+    <em>inverse</em> of record-first, because this call destroys a
+    collection path instead of creating one. Crash after expire =
+    unpaid row + dead link (re-mint recovers); the reverse would
+    invite a double payment. (2026-07-21)</td></tr>
+<tr><td>50¢ floor, refused early</td><td>Stripe rejects sub-50¢
+    charges. <code>settle_event</code> raises before any stamp or
+    present-marking; the preview hides the buttons. Service-level, so
+    a direct POST can't skate past. NOT a floor in
+    <code>_validate_cents</code> — a partial refund may legitimately be
+    smaller. (2026-07-21)</td></tr>
+<tr><td>One spelling per person</td><td>Every phone store and compare
+    goes through <code>normalize_phone</code>. Identity is the phone;
+    two spellings would be two people, and one of them can't be
+    charged. (2026-07-21)</td></tr>
 </tbody>
 </table>
 
@@ -245,8 +311,33 @@ contradict one, stop and align (CLAUDE.md).</p>
     need httpx at RUNTIME — it was dev-only once, the image lacked
     it, every deployed Stripe call 500'd (found 2026-07-16). Pinned
     in requirements.txt.</td></tr>
+<tr><td><strong>Connect account shape</strong></td>
+    <td>The connected account needs BOTH configurations: <strong>merchant</strong>
+    (be merchant of record — <code>on_behalf_of</code>) and
+    <strong>recipient</strong> (receive transfers —
+    <code>transfer_data.destination</code>). The dashboard wizard
+    created a merchant-only v2 account, so every charge failed
+    <code>insufficient_capabilities_for_transfer</code>. Fixed by
+    requesting <code>configuration.recipient.capabilities.stripe_balance
+    .stripe_transfers</code> via <code>POST /v2/core/accounts/{id}</code>
+    (<code>Stripe-Version: 2025-08-27.preview</code>). (2026-07-21)</td></tr>
 </tbody>
 </table>
+
+<div class="callout">
+  <span class="label">The check that lied — worth internalizing</span>
+  The v1 account endpoint reported <code>transfers: active</code>,
+  <code>charges_enabled: true</code>, <code>currently_due: []</code>
+  — and transfers were nonetheless impossible, because on a v2
+  account that field is a projection, not the capability that governs
+  receiving them. The v2 view said it plainly:
+  <code>applied_configurations: ["merchant"]</code>. Third instance of
+  the same failure mode in this project (after the fee-payer theory
+  and the <code>success_url</code> assumption): <strong>a plausible
+  check that appears to pass</strong>. The reliable move is to
+  reproduce the actual failing call and read Stripe's own error, not
+  to consult a status field adjacent to it.
+</div>
 
 <div class="callout">
   <span class="label">The operational fact that explains everything</span>
@@ -266,13 +357,18 @@ contradict one, stop and align (CLAUDE.md).</p>
 <tr><td>Boundary</td><td>Never the live Stripe API — conftest injects
     <code>mock_stripe</code>. Transactions are pinned against
     in-memory SQLite (aiosqlite): real commits, still hermetic.</td></tr>
-<tr><td>Pinning tests</td><td>test_state_machines.py (full transition
-    matrix) · test_payments.py (exact-kwarg contracts) ·
+<tr><td>Pinning tests</td><td>19 files, <strong>367 passing</strong> +
+    9 xfail(strict) (the open gross-up). test_state_machines.py (full
+    transition matrix) · test_payments.py (exact-kwarg contracts) ·
     test_money_guard.py (the hook fails closed) · test_settle_web.py
-    (settle outcomes incl. mint-failure labeling).</td></tr>
+    (settle outcomes incl. mint-failure labeling) · test_pay_direct.py
+    (the link dies before the paid write) · test_phone.py (autofill and
+    typed digits are one person).</td></tr>
 <tr><td>Known blind spots</td><td>Mocks can't see fees (Lesson 2's
-    $3.51 discovery) and SQLite ignores VARCHAR widths (the 64-char
-    overflow, 2026-07-16). Both burned once already: anything
+    $3.51 discovery), SQLite ignores VARCHAR widths (the 64-char
+    overflow, 2026-07-16), and <strong>no test can see your Stripe
+    account's configuration</strong> (the merchant-only account,
+    2026-07-21). All three burned once already: anything
     account-shaped or Postgres-shaped must be verified against the
     real thing, deliberately.</td></tr>
 </tbody>
@@ -336,13 +432,20 @@ contradict one, stop and align (CLAUDE.md).</p>
     First quiz VOID (position bias, learning-records/0006); clean
     <a href="../lessons/0008-retrieval-check-settlement.html">retrieval
     check</a> awaiting a score.</td></tr>
-<tr><td>→</td><td>async/await — what the keywords buy, anchored to the
+<tr><td>→</td><td><strong>The three accounts</strong> — cardholder,
+    platform, connected; what a refund does vs a transfer reversal;
+    where the fee lands and why refunding doesn't return it.
+    <strong>Promoted to next</strong> (learning-records/0007): the gap
+    is live, and one-shot settlement makes the dashboard
+    refund + reversal the only correction path on 7/29.</td></tr>
+<tr><td>·</td><td>async/await — what the keywords buy, anchored to the
     off-session charge and the roster poll. The last untaught
     mechanic in the money path.</td></tr>
 <tr><td>·</td><td>The web layer in code — capability lookups, the /r/
     island's SetupIntent handshake, settle preview math.</td></tr>
 <tr><td>·</td><td>Deployment &amp; the live flip — demo.md's flip,
-    runbook drill, what each env var breaks when wrong.</td></tr>
+    runbook drill, what each env var breaks when wrong, and the
+    account-shape check that no test can make for you.</td></tr>
 <tr><td>·</td><td>Testing the money path — where the mock boundary
     sits and what it structurally cannot see.</td></tr>
 <tr><td>·</td><td>Authoring walk-ins &amp; refunds — the next
@@ -365,9 +468,25 @@ contradict one, stop and align (CLAUDE.md).</p>
     cents" planner absorption; reality is ~$1.17 per charged attendee
     in platform fees until the gross-up ships.</td></tr>
 <tr><td>"Connect (Standard)" naming</td><td>CLAUDE.md/decisions.md say
-    Standard; the real account is Express-equivalent
-    (<code>type: "none"</code>). Correctly configured — the docs just
+    Standard; the live account is an Express-dashboard v2 account
+    (<code>type: "none"</code>, <code>controller.type: "application"</code>).
+    Now correctly configured (merchant + recipient) — the docs still
     name it wrong.</td></tr>
+<tr><td>Two transfers awaiting reversal</td><td>The 7/21 test charges
+    were refunded, but the paired transfers were not reversed
+    (<code>tr_3TvdcV…</code>, <code>tr_3Tve3B…</code> — both still
+    <code>reversed: false</code>). Harmless while planner and platform
+    are the same person; the habit is what matters before another
+    planner exists.</td></tr>
+<tr><td>Event edit — cut for 7/29</td><td>Explicitly cut 2026-07-21.
+    Nothing charges before settle, so a wrong event is cancel +
+    recreate. Revisit after the club night.</td></tr>
+<tr><td>Shared phone = one attendee</td><td>Normalization made every
+    spelling one person; two <em>people</em> on one number are still
+    one row (a couple sharing a phone undercounts the divisor).
+    Accepted for 7/29 — the invite says "your own number". The fix is
+    a confirm-identity step on /e/, and it trades against the
+    lost-link recovery that re-entering a phone currently gives.</td></tr>
 </tbody>
 </table>
 
@@ -377,6 +496,9 @@ contradict one, stop and align (CLAUDE.md).</p>
   <a href="payment-row.html">Payment-row field guide</a> ·
   <a href="../MISSION.md">Mission</a> ·
   <a href="../RESOURCES.md">Resources</a></p>
+  <p>Print to PDF from any machine:
+  <code>cd reference &amp;&amp; weasyprint codebase-map.html
+  knowaplan-map.pdf</code></p>
 </div>
 
 </body>

@@ -293,6 +293,25 @@ is currently false.**
    the test-mode account; re-confirmed 2026-07-18 on the LIVE
    account `acct_1TuKMK1a8RMP4gcA` — card_payments + payouts
    active.)*
+   **⚠ 2026-07-21 — that check was insufficient, and it cost the
+   first live test.** Every charge failed
+   `insufficient_capabilities_for_transfer` while all of the fields
+   above still read healthy, *including* `transfers: active`. On a v2
+   account the v1 `capabilities` object is a projection; the governing
+   fact was `applied_configurations: ["merchant"]` — the dashboard
+   wizard had never granted the **recipient** configuration, so the
+   account could be merchant of record (`on_behalf_of` worked) but
+   could not RECEIVE a transfer (`transfer_data.destination` did not).
+   Fixed by requesting
+   `configuration.recipient.capabilities.stripe_balance.stripe_transfers`
+   via `POST /v2/core/accounts/{id}` with
+   `Stripe-Version: 2025-08-27.preview`; verified by re-running the
+   exact failing PaymentIntent call. **Any future connected account
+   needs BOTH configurations.** Same failure mode as items below: a
+   plausible status field adjacent to the symptom. The reliable
+   diagnostic was isolating the parameters — `on_behalf_of` alone
+   succeeded, `transfer_data` alone failed — and reading Stripe's own
+   error text rather than an account summary.
 5. "Never re-fire a saved card" is self-imposed, not a Stripe limit.
 6. **CLAUDE.md + decisions.md say "Connect (Standard)". It isn't.**
    The account is Express-equivalent (`type: "none"`, controller
