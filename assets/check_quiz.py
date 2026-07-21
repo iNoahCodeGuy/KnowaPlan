@@ -17,7 +17,8 @@ question a learning record was built on.
 Usage:  .venv/bin/python assets/check_quiz.py lessons/0007-*.html
         for f in lessons/*.html; do .venv/bin/python assets/check_quiz.py "$f"; done
 """
-import re, sys
+import re
+import sys
 
 src = open(sys.argv[1], encoding="utf-8").read()
 
