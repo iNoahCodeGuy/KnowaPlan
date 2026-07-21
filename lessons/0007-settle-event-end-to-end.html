@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 6 — settle_event, end to end</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+
+<h1>settle_event, end to end</h1>
+<p class="subtitle">Lesson 6 · ~12 minutes · The loop that charges
+your whole group without ever betting the group on one card</p>
+
+<p>You're about to wire <code>gross_up</code> into this function, so
+you should own its choreography first. Lesson 5 gave you one commit;
+Lesson 4 gave you one charge. This is the <strong>whole
+settlement</strong>: what happens when you press Settle with four
+friends on the roster and one of them has an expired card, one has no
+card, and your wifi dies halfway through.</p>
+
+<p class="note">Nothing here is a new decision. This is
+<a href="../decisions.md">decisions.md</a> 2026-07-16 (settlement
+mechanics) and the recovery-labeling half of the <code>success_url</code>
+entry — both yours — read at the grain of the code that implements
+them.</p>
+
+<h2>The four phases</h2>
+
+<p><a href="../app/settlement.py">settle_event</a> is long but it is
+only ever doing one of four things:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><strong>1 · Close</strong></td><td>An <code>open</code> event
+    closes first — settlement beginning <em>is</em> a close
+    (state_machines.md). Any other state than <code>closed</code>
+    refuses outright.</td></tr>
+<tr><td><strong>2 · Resolve</strong></td><td>Undecided rows get the
+    planner's pre-set default. Absences move no money, so they land in
+    <strong>one bulk commit</strong>.</td></tr>
+<tr><td><strong>3 · Charge</strong></td><td>The per-attendee loop —
+    the rest of this lesson.</td></tr>
+<tr><td><strong>4 · Settle</strong></td><td>Event →
+    <code>settled</code>, <code>settled_at</code> stamped, report
+    returned.</td></tr>
+</tbody>
+</table>
+
+<p>The split sits between 2 and 3, and it is two lines:</p>
+
+<pre><code>divisor = len(participants)
+share   = event.total_cost_cents // divisor if divisor else 0</code></pre>
+
+<p>Note what <code>participants</code> means: <em>everyone present</em>.
+Zero participants is a valid settlement — charge nobody — which is why
+the <code>if divisor</code> guard exists instead of a crash.</p>
+
+<h2>The planner is a divisor, never a charge</h2>
+
+<p>Your rule from 2026-07-16: a playing planner counts in the split but
+is never charged — routing their money to their own account minus
+Stripe's cut is pure waste. Here is that entire decision, as
+<strong>one line</strong>:</p>
+
+<pre><code>charged = [
+    (rsvp, attendee)
+    for rsvp, attendee in participants
+    if attendee.id != planner.attendee_id      # &lt;- the whole rule
+]</code></pre>
+
+<div class="callout">
+  <span class="label">Two lists, one difference</span>
+  <code>participants</code> sets the <em>divisor</em>.
+  <code>charged</code> sets who gets a <em>Payment row</em>. The planner
+  is in the first and filtered out of the second — so they lower
+  everyone's share by playing, and pay nothing through Stripe. Delete
+  that <code>if</code> and you'd charge yourself, then pay a fee to
+  send your own money to yourself.
+</div>
+
+<h2>The loop that can't be aborted</h2>
+
+<p>Four friends. Marcus's card declines. Does Ana still get charged?</p>
+
+<p>She does, and the reason is purely structural — the
+<code>try</code> lives <strong>inside</strong> the loop, so a failure
+ends one iteration, not the settlement:</p>
+
+<pre><code>for rsvp, attendee in charged:
+    ...                       # record-first stamp + COMMIT
+    try:
+        outcomes.append(await _collect(...))
+    except (stripe.StripeError, RuntimeError):
+        result = "dangling" if payment.state == "none" else "unpaid"
+        outcomes.append(Outcome(attendee.id, result))</code></pre>
+
+<p>Move that <code>try</code> outside the <code>for</code> and one
+friend's expired card would abandon everyone after them: uncharged
+friends, an event stuck in <code>closed</code>, and you finding out by
+text.</p>
+
+<h3>The subtlety: a decline never reaches this except</h3>
+
+<p>This is the part worth slowing down on. <code>stripe.CardError</code>
+<em>is</em> a subclass of <code>stripe.StripeError</code> — I checked in
+your venv, it's <code>True</code> — so it looks like a decline would be
+caught right here. It isn't, because it never gets this far:
+<a href="../app/payments.py">charge_share</a> catches
+<code>CardError</code> itself and <strong>returns</strong> a row marked
+<code>unpaid</code>.</p>
+
+<div class="callout">
+  <span class="label">The principle, in your own comment</span>
+  “The card said no” is an <strong>outcome, not an error.</strong> A
+  decline is the system working — an answer arrived. So it becomes a
+  row state, not an exception. What reaches the loop's
+  <code>except</code> is only the case where <em>no answer arrived</em>:
+  a network or API failure (<code>StripeError</code>), or a
+  PaymentIntent that came back in a status other than
+  <code>succeeded</code> (<code>RuntimeError</code>, raised by your own
+  code — and <em>not</em> a Stripe class, which is why it's named
+  separately in that tuple).
+</div>
+
+<h2>Reading the label: dangling or unpaid</h2>
+
+<p>One line decides which recovery the planner is offered, and it does
+it by reading the row rather than the exception:</p>
+
+<pre><code>result = "dangling" if payment.state == "none" else "unpaid"</code></pre>
+
+<table class="ref">
+<tbody>
+<tr><td><code>state == "none"</code></td><td>The charge itself is
+    unconfirmed. Stripe may or may not have taken the money →
+    <span class="hot">dangling</span>, retry with the
+    <strong>same</strong> key and stamped amount.</td></tr>
+<tr><td>past <code>none</code></td><td>The charge already resolved
+    (<code>unpaid</code> is committed); only the <em>link mint</em>
+    failed → <span class="hot">unpaid</span>, recovery is a fresh
+    link.</td></tr>
+</tbody>
+</table>
+
+<p>You paid for this distinction in production. The first smoke walk
+mislabeled every failure as <code>dangling</code>, so a cardless row
+whose link mint failed wore a Retry button that
+<code>retry_dangling</code> correctly refused — recovery dead-ended
+(decisions.md 2026-07-16). The fix is the line above.</p>
+
+<h2>What a second press of Settle does</h2>
+
+<p>Settlement is <strong>resumable</strong>, and this is where the
+money safety lives. Before the loop, every existing Payment row for the
+event is loaded into <code>existing</code>, keyed by attendee. Each
+iteration then asks what already happened to <em>this</em> person:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><code>paid</code></td><td>Skip. Report paid. Nobody is charged
+    twice.</td></tr>
+<tr><td><code>unpaid</code></td><td>Skip, and deliberately do
+    <strong>not</strong> re-mint — the stored link is still live
+    (one payable link per row).</td></tr>
+<tr><td>other terminal</td><td>Refunded or abandoned are audit rows;
+    a new attempt is walk-in territory, deferred.</td></tr>
+<tr><td><code>none</code> + stamp</td><td>Dangling from the crashed
+    run: retry with <code>charge_requested_cents</code> — the
+    <em>stamped</em> amount, never a recompute.</td></tr>
+<tr><td>no row</td><td>Fresh: stamp intent, commit, then charge.</td></tr>
+</tbody>
+</table>
+
+<p>That last-but-one row is the one to hold onto. A recomputed amount
+would change the Stripe parameters, and identical-params is exactly
+what makes a replayed idempotency key safe. Re-sending the stamp is
+what lets you press Settle again at the court without thinking about
+it.</p>
+
+<h2>Where your gross_up wiring goes</h2>
+
+<p>Now the payoff, because you're about to edit these exact lines. One
+number splits into two, and the whole job is keeping them straight:</p>
+
+<table class="ref">
+<tbody>
+<tr><td><code>share</code></td><td><strong>Net.</strong>
+    <code>total // divisor</code> — what you must end up with. Stays
+    exactly as it is.</td></tr>
+<tr><td>billed</td><td><strong>Gross.</strong>
+    <code>gross_up(share, …)</code> — what goes on the card, and
+    therefore what lands in the <code>charge_requested_cents</code>
+    stamp and flows into <code>_collect</code>.</td></tr>
+</tbody>
+</table>
+
+<p>Two traps, both already pinned by the red tests waiting for you:</p>
+
+<ul>
+<li>The <strong>cap</strong> at <code>cap_at_estimate</code> must
+compare gross to gross. Today's <code>min(share, estimate)</code> with a
+grossed estimate would compare a net against a gross and quietly bill
+the un-grossed number — you'd absorb the entire fee while believing you
+had capped.</li>
+<li>The <strong>stamp</strong> takes the billed amount. It already
+means “how much,” and <code>charge_share</code> refuses any drift from
+it — so the retry path inherits gross-up correctness for free, with no
+change to <code>retry_dangling</code> at all.</li>
+</ul>
+
+<h2>Check yourself</h2>
+
+<p>One shot each. The wrong answers are where the teaching is.</p>
+
+<section class="quiz" data-quiz>
+
+<div class="quiz-q" data-answer="filter">
+  <div class="quiz-stem"><span class="n">1</span>Which code makes a
+  playing planner count in the split but never get charged?</div>
+  <div class="quiz-choices">
+    <button data-key="filter">The charged list filter</button>
+    <button data-key="loop">The participants loop guard</button>
+    <button data-key="existing">The existing rows lookup</button>
+    <button data-key="commit">The final commit block</button>
+  </div>
+  <div class="quiz-fb" data-key="filter"><span class="verdict">Right</span>
+    — <code>if attendee.id != planner.attendee_id</code> builds
+    <code>charged</code> out of <code>participants</code>. In the
+    divisor list, out of the charged list: “a divisor, never a charge,”
+    as one line.</div>
+  <div class="quiz-fb" data-key="loop"><span class="verdict">No</span>
+    — the planner is deliberately kept <em>in</em>
+    <code>participants</code>; that's what makes them lower everyone's
+    share. The exclusion happens one list later.</div>
+  <div class="quiz-fb" data-key="existing"><span class="verdict">No</span>
+    — that dict is about resuming a crashed run (what already happened
+    to this person), not about who is exempt from charging.</div>
+  <div class="quiz-fb" data-key="commit"><span class="verdict">No</span>
+    — the final commit just moves the event to <code>settled</code>. By
+    then every charging decision is long made.</div>
+</div>
+
+<div class="quiz-q" data-answer="inside">
+  <div class="quiz-stem"><span class="n">2</span>Marcus's card declines
+  mid-settle. Where is that <code>CardError</code> handled?</div>
+  <div class="quiz-choices">
+    <button data-key="inside">Inside the charge_share call</button>
+    <button data-key="loop">Inside the loop's except</button>
+    <button data-key="collect">Inside _collect's second commit</button>
+    <button data-key="report">Inside the settlement report</button>
+  </div>
+  <div class="quiz-fb" data-key="inside"><span class="verdict">Right</span>
+    — <code>charge_share</code> catches it and <em>returns</em> a row
+    marked <code>unpaid</code> with the decline reason. A decline is an
+    outcome, not an error: an answer arrived, and answers become row
+    states.</div>
+  <div class="quiz-fb" data-key="loop"><span class="verdict">No — and
+    this is the tempting one</span>
+    — <code>CardError</code> really is a <code>StripeError</code>
+    subclass, so that <code>except</code> <em>would</em> catch it. It
+    never gets the chance, because the decline was already turned into
+    a row two frames down.</div>
+  <div class="quiz-fb" data-key="collect"><span class="verdict">No</span>
+    — that commit persists the <code>unpaid</code> row that
+    <code>charge_share</code> already wrote in memory. It saves the
+    outcome; it doesn't catch anything.</div>
+  <div class="quiz-fb" data-key="report"><span class="verdict">No</span>
+    — the report only collects <code>Outcome</code> values at the end.
+    It's a summary, never a handler.</div>
+</div>
+
+<div class="quiz-q" data-answer="skipped">
+  <div class="quiz-stem"><span class="n">3</span>Settle crashed after
+  charging Ana. You press Settle again. What happens to Ana?</div>
+  <div class="quiz-choices">
+    <button data-key="skipped">Skipped without a recharge</button>
+    <button data-key="again">Charged a second time</button>
+    <button data-key="refund">Refunded then charged again</button>
+    <button data-key="dangle">Left dangling for retry</button>
+  </div>
+  <div class="quiz-fb" data-key="skipped"><span class="verdict">Right</span>
+    — her row is in <code>existing</code> as <code>paid</code>, so the
+    loop reports paid and moves on. That's what makes pressing Settle
+    twice a safe reflex at the court.</div>
+  <div class="quiz-fb" data-key="again"><span class="verdict">No</span>
+    — and this is the failure the <code>existing</code> lookup exists
+    to prevent. Note it's the <em>database row</em> that protects her,
+    not Stripe's idempotency window.</div>
+  <div class="quiz-fb" data-key="refund"><span class="verdict">No</span>
+    — nothing in settlement refunds. <code>refund_charge</code> is
+    still a stub raising <code>NotImplementedError</code> until
+    walk-ins ship.</div>
+  <div class="quiz-fb" data-key="dangle"><span class="verdict">No</span>
+    — dangling means <code>state=none</code> with a stamp: charge
+    unconfirmed. Ana's charge is confirmed <code>paid</code>; there's
+    nothing to retry.</div>
+</div>
+
+<div class="quiz-q" data-answer="state">
+  <div class="quiz-stem"><span class="n">4</span>The loop labels a
+  failure <code>dangling</code> versus <code>unpaid</code> by
+  reading:</div>
+  <div class="quiz-choices">
+    <button data-key="state">Payment state at failure</button>
+    <button data-key="exc">Which exception was raised</button>
+    <button data-key="card">Whether a card exists</button>
+    <button data-key="stamp">The stamp timestamp age</button>
+  </div>
+  <div class="quiz-fb" data-key="state"><span class="verdict">Right</span>
+    — <code>"dangling" if payment.state == "none" else "unpaid"</code>.
+    Still <code>none</code> means the charge never resolved; past
+    <code>none</code> means it did and only the link mint failed.</div>
+  <div class="quiz-fb" data-key="exc"><span class="verdict">No</span>
+    — the same <code>StripeError</code> can arrive from the charge
+    <em>or</em> from the link mint. The exception type can't tell you
+    which; the committed row can.</div>
+  <div class="quiz-fb" data-key="card"><span class="verdict">No</span>
+    — a cardless row can dangle and a carded row can land unpaid. Card
+    presence chooses the <em>path</em>, not the label.</div>
+  <div class="quiz-fb" data-key="stamp"><span class="verdict">No</span>
+    — nothing reads the stamp's age here. The stamp carries <em>when
+    and how much</em>; the state carries how far it got.</div>
+</div>
+
+<div class="quiz-q" data-answer="stamp">
+  <div class="quiz-stem"><span class="n">5</span>Wiring gross-up:
+  <code>share</code> stays the net target. Which value becomes the
+  grossed number?</div>
+  <div class="quiz-choices">
+    <button data-key="stamp">The stamped charge cents</button>
+    <button data-key="total">The event total cost</button>
+    <button data-key="divisor">The divisor participant count</button>
+    <button data-key="settled">The settled at timestamp</button>
+  </div>
+  <div class="quiz-fb" data-key="stamp"><span class="verdict">Right</span>
+    — <code>charge_requested_cents</code> is what goes on the card, so
+    it carries <code>gross_up(share)</code>. Because
+    <code>charge_share</code> refuses any drift from the stamp, the
+    retry path stays correct with no edit.</div>
+  <div class="quiz-fb" data-key="total"><span class="verdict">No</span>
+    — the venue's bill is the venue's bill. Grossing it up would gross
+    up your own share too, and you're not charged through Stripe at
+    all.</div>
+  <div class="quiz-fb" data-key="divisor"><span class="verdict">No</span>
+    — that's a headcount, not money. Fees don't change how many people
+    played.</div>
+  <div class="quiz-fb" data-key="settled"><span class="verdict">No</span>
+    — a timestamp. Worth noticing that most of this function isn't
+    money at all; only two values ever are.</div>
+</div>
+
+</section>
+
+<h2>What you can now do</h2>
+
+<p>Read <code>settle_event</code> as four phases instead of one long
+function, and say for any failure which of your friends is affected
+(exactly one) and which recovery button they should see. You can also
+now place the gross-up edit precisely: one new value, two call sites,
+and a cap comparison that must not mix units.</p>
+
+<div class="sourcebox">
+  <span class="label">Read next — and <em>run</em> it</span>
+  <p style="margin:.4rem 0 .3rem"><a
+  href="../tests/test_settlement.py"><strong>TestSettleFailures</strong></a>
+  — your own suite</p>
+  <p style="margin:0;font-size:.87rem">Four tests, one per claim above:
+  <code>test_decline_mid_settle_links_and_continues</code>,
+  <code>test_api_error_mid_settle_dangles_and_continues</code>,
+  <code>test_rerun_retries_dangling_with_stamped_cents</code>,
+  <code>test_rerun_skips_unpaid_without_reminting</code>. Run
+  <code>.venv/bin/pytest -k SettleFailures -v</code> and read the names
+  as sentences — that's the whole lesson in four lines.</p>
+</div>
+
+<div class="callout noprint">
+  <span class="label">How the claims here were checked</span>
+  The exception hierarchy was verified in your own venv rather than
+  from memory (<code>issubclass(stripe.CardError,
+  stripe.StripeError)</code> → <code>True</code>;
+  <code>RuntimeError</code> → <code>False</code>, which is why the
+  <code>except</code> names both). Every snippet is a faithful
+  condensation of <a href="../app/settlement.py">app/settlement.py</a>
+  as of 2026-07-18 — comments trimmed, no logic changed.
+</div>
+
+<div class="callout noprint">
+  <span class="label">Ask me things</span>
+  Sharp ones right now: <em>“what happens to the in-memory row when the
+  Stripe call raises — is it still dirty in the session?”</em> ·
+  <em>“why is the absence resolution one bulk commit but the charges
+  one commit each?”</em> · <em>“could two planners press Settle at the
+  same moment?”</em> That last one has a real answer, and it isn't
+  entirely comfortable.
+</div>
+
+<div class="footer">
+  <p><strong>Next up</strong> — async/await: what
+  <code>await</code> actually does at the Stripe call and the roster
+  poll. It's the last untaught mechanic in the money path, and the
+  only one left from your original “new to most of it” list.</p>
+  <p><a href="0006-why-the-stamp-and-the-state-cant-be-one-write.html">← Lesson 5</a> ·
+     <a href="0005-follow-one-charge-through-the-code.html">Lesson 4</a> ·
+     <a href="../reference/codebase-map.html">The map</a> ·
+     <a href="../reference/payment-row.html">Field guide</a> ·
+     <a href="../MISSION.md">Mission</a></p>
+</div>
+
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

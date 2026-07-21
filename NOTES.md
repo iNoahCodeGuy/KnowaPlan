@@ -171,6 +171,40 @@ line by line (CLAUDE.md: money code is not authored wholesale).
   and the production checklist; feature freeze ~7/19). Next queued
   lesson remains settle_event end-to-end.
 
+## Session log — 2026-07-18 (cont.): Lesson 6 + a quiz-integrity bug
+
+- **Shipped Lesson 6** (lessons/0007-settle-event-end-to-end.html):
+  the four phases, `charged` vs `participants` as the one-line
+  planner skip, the try INSIDE the loop, the decline-is-not-an-
+  exception subtlety, resume semantics via the `existing` dict, and
+  the dangling/unpaid label line. Ends by placing his pending
+  gross_up wiring (net `share` vs billed stamp, the units trap in
+  the cap) — the lesson doubles as the scaffold for the code he
+  owes. Verified before teaching: `issubclass(CardError,
+  StripeError)` is True and RuntimeError is not a StripeError
+  (checked in the venv, not recalled), and all four cited tests run
+  green under the names quoted.
+- **Found a real defect in the quiz component's usage.** Three
+  lessons had unequal-word-count options, violating the workspace
+  convention (a length difference is a formatting tell, so a right
+  answer stops proving recall). Worst case was Lesson 6's own draft
+  Q2, where the CORRECT answer was the short one — caught and fixed
+  before shipping.
+  - lessons/0005 Q1 (the knockout for his L3 Q3 gap) had a 4-word
+    distractor among 3s. Fixed BEFORE he takes it — that quiz is
+    still unverified, so the data would have been muddy.
+  - Review Q6 (lessons/0004) — the miss the whole recent curriculum
+    was built on — had the correct answer as the only option not
+    starting with "The". Normalized. **The inference in
+    learning-records/0004 still holds and is arguably stronger:**
+    the tell pointed AT the right answer and he still missed it, so
+    the concept→code reading is not an artifact of option shape.
+- **New durable component: assets/check_quiz.py** — an authoring
+  guard (not shipped in lessons) that validates data-answer/
+  data-key/feedback wiring and equal word counts. Run it on every
+  lesson before shipping; all 7 pass now.
+- Still unverified: quiz results for Lessons 4, 5, and 6. Ask.
+
 ## Open threads / candidate next lessons
 
 1. **Transactions & record-first mechanics** — what a commit
