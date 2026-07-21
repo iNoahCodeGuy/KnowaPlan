@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Settled — {{ event.title }}{% endblock %}
+{% block home %}
+<p class="home"><a href="/admin/{{ event.admin_token }}">⌂
+  Event home</a></p>
+{% endblock %}
 {% block content %}
 <h1>Settled: {{ event.title }}</h1>
 <p>True share {{ report.share_cents | dollars }} · charged

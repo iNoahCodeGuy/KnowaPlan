@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ attendee.name }} — {{ outcome }}{% endblock %}
+{% block home %}
+<p class="home"><a href="/admin/{{ token }}">⌂ Event home</a></p>
+{% endblock %}
 {% block content %}
 <h1>{{ attendee.name }}: {{ outcome }}</h1>
 {% if outcome == "paid" %}

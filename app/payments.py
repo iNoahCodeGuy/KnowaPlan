@@ -45,6 +45,8 @@ Invariants every body must keep:
 - Never call the live Stripe API in tests — inject a mock (conftest
   mock_stripe).
 """
+from datetime import datetime, timezone
+
 import stripe
 
 from app.config import get_settings
@@ -321,6 +323,38 @@ async def poll_link_status(payment: Payment) -> Payment:
     # The decline/no-card reason is history once collected.
     payment.state_reason = None
     return payment
+
+
+async def mark_paid_direct(payment: Payment) -> None:
+    """Planner-confirmed out-of-band payment (Venmo/Zelle/cash):
+    unpaid -> paid, paid_direct_at stamped; charged_cents stays
+    None — that column is Stripe's number and Stripe collected
+    nothing. Guard order is the INVERSE of record-first: a live
+    link is a collection path, so it dies BEFORE the row says
+    paid (crash after expire = unpaid row + dead link, re-mint
+    recovers; paid row + live link invites double-pay). A stored
+    session that already collected REFUSES: the roster poll
+    records the app payment, and the claim flag left in place
+    surfaces the double for the planner to refund. The caller
+    commits."""
+    if payment.state != "unpaid":
+        raise ValueError(
+            "mark-paid-direct is for 'unpaid' rows only"
+        )
+    old_id = payment.stripe_checkout_session_id
+    if old_id is not None:
+        _configure()
+        old = await stripe.checkout.Session.retrieve_async(old_id)
+        if old.payment_status == "paid":
+            raise ValueError(
+                "they already paid the app link — reload the "
+                "roster to record it"
+            )
+        if old.status == "open":
+            await stripe.checkout.Session.expire_async(old_id)
+    _move(payment, "paid")
+    payment.paid_direct_at = datetime.now(timezone.utc)
+    payment.state_reason = payment.claimed_via or "direct"
 
 
 async def refund_charge(payment: Payment, refund_cents: int) -> Payment:

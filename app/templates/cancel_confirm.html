@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Cancel — {{ event.title }}{% endblock %}
+{% block home %}
+<p class="home"><a href="/admin/{{ event.admin_token }}">⌂
+  Event home</a></p>
+{% endblock %}
 {% block content %}
 <h1>Cancel {{ event.title }}?</h1>
 <p>Nothing has been charged (there are no holds to release —

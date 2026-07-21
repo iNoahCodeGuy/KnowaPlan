@@ -182,9 +182,17 @@
       display: inline-block; word-break: break-all;
       font-size: .85rem;
     }
+    .home {
+      font-size: .9rem; margin: 0 0 1rem;
+    }
   </style>
 </head>
 <body>
+{# Per-role "main menu": each page links only to the home its own
+   token already proves — /me/ for attendee pages, /admin/ for
+   planner sub-pages. Never cross-token, and no global home: the
+   app knows who you are only by the URL you hold. #}
+{% block home %}{% endblock %}
 {% block content %}{% endblock %}
 </body>
 </html>

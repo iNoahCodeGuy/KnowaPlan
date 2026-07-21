@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ event.title }} — your RSVP{% endblock %}
+{% block home %}
+<p class="home"><a href="/me/{{ attendee.attendee_token }}">⌂
+  Your events</a></p>
+{% endblock %}
 {% block content %}
 <h1>{{ event.title }}</h1>
 <p class="muted">
@@ -120,13 +124,45 @@
   {% endif %}
   {% if payment %}
     {% if payment.state == "paid" %}
-    <p class="ok">Paid
-      {{ payment.charged_cents | dollars }} ✓ — thanks!</p>
+      {% if payment.paid_direct_at %}
+      <p class="ok">{{ planner.name }} marked you paid ✓
+        ({{ payment.state_reason }}).</p>
+      {% else %}
+      <p class="ok">Paid
+        {{ payment.charged_cents | dollars }} ✓ — thanks!</p>
+        {% if payment.claimed_at %}
+        <p class="error">You also told {{ planner.name }} you paid
+          them directly ({{ payment.claimed_via }}). If both went
+          through, {{ planner.name }} owes one back — text
+          them.</p>
+        {% endif %}
+      {% endif %}
     {% elif payment.state == "unpaid" %}
     <p>Your share is
       {{ (payment.charge_requested_cents
           or event.estimated_share_cents) | dollars }} —
       {{ planner.name }} will text you a payment link.</p>
+      {% if planner.payment_handles %}
+        {% if payment.claimed_at %}
+        <p class="muted">You told {{ planner.name }} you paid
+          ({{ payment.claimed_via }}) — waiting on their
+          confirm.</p>
+        {% else %}
+        <p>Or pay {{ planner.name }} directly:
+          <strong>{{ planner.payment_handles }}</strong></p>
+        <form method="post"
+              action="/r/{{ rsvp.rsvp_token }}/claim">
+          <select name="via">
+            <option value="venmo">Venmo</option>
+            <option value="zelle">Zelle</option>
+            <option value="apple_cash">Apple Cash</option>
+            <option value="cash">Cash</option>
+            <option value="other">Other</option>
+          </select>
+          <button>I paid {{ planner.name }} directly</button>
+        </form>
+        {% endif %}
+      {% endif %}
     {% endif %}
   {% endif %}
 {% endif %}

@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Settle — {{ event.title }}{% endblock %}
+{% block home %}
+<p class="home"><a href="/admin/{{ event.admin_token }}">⌂
+  Event home</a></p>
+{% endblock %}
 {% block content %}
 <h1>Settle up: {{ event.title }}</h1>
 

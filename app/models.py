@@ -53,6 +53,13 @@ class Planner(Base):
     # Stripe Connect (Standard) account that receives funds and is
     # merchant of record (on_behalf_of)
     stripe_account_id: Mapped[str] = mapped_column(String(255))
+    # "How friends pay you directly" — free text shown to unpaid
+    # attendees (e.g. "Venmo @noah · Zelle 555-0101"). Display-only
+    # copy: never parsed, never money-bearing. None = app-only
+    # collection; the direct-pay UI stays hidden.
+    payment_handles: Mapped[str | None] = mapped_column(
+        String(255)
+    )
     # The planner's own participation: a playing planner is an
     # ordinary Attendee + Rsvp row (decisions.md 2026-07-16). They
     # count in the split divisor when present but are NEVER charged
@@ -227,3 +234,16 @@ class Payment(Base):
     # Why a terminal/unpaid state was reached (no_card, declined,
     # abandoned, ...) — for the roster and support questions
     state_reason: Mapped[str | None] = mapped_column(Text)
+    # Attendee's "I paid the planner directly" claim on an unpaid
+    # row. A claim is NOT a payment state — the row stays unpaid
+    # (never assume collected, CLAUDE.md) until the planner
+    # confirms. Survives a link payment on purpose: paid-by-Stripe
+    # + claim still set = the one double-collection the app can
+    # see, surfaced to both sides.
+    claimed_at: Mapped[datetime | None]
+    claimed_via: Mapped[str | None] = mapped_column(String(16))
+    # Set when the planner confirmed an out-of-band payment
+    # (Venmo/Zelle/cash). Distinguishes those paid rows forever:
+    # charged_cents stays None (it is Stripe's number and Stripe
+    # collected nothing), and the Stripe refund path never applies.
+    paid_direct_at: Mapped[datetime | None]

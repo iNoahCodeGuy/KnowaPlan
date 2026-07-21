@@ -3,4 +3,7 @@
 {% block content %}
 <h1>{{ heading | default("Can't do that") }}</h1>
 <p>{{ message }}</p>
+{# Tokenless on purpose (a shared error page must not guess whose
+   link failed), so "back" is the browser's own history. #}
+<p><a href="javascript:history.back()">← Go back</a></p>
 {% endblock %}

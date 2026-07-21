@@ -24,6 +24,11 @@
   <input id="goal_attendance" name="goal_attendance" type="number"
          min="1" required
          value="{{ form.get('goal_attendance', '') }}">
+  <label for="payment_handles">How friends pay you directly
+    (optional — shown to anyone who owes)</label>
+  <input id="payment_handles" name="payment_handles"
+         placeholder="Venmo @you · Zelle 555-0101"
+         value="{{ form.get('payment_handles', '') }}">
   <label for="create_password">Create password</label>
   <input id="create_password" name="create_password"
          type="password" required>

@@ -71,9 +71,19 @@ the group after you tap this.</p>
         <span class="pay pay-{{ payment.state }}">{{ payment.state }}</span>
         {% if payment.charged_cents %}
           ({{ payment.charged_cents | dollars }})
+        {% elif payment.paid_direct_at
+              and payment.charge_requested_cents %}
+          ({{ payment.charge_requested_cents | dollars }} direct)
         {% endif %}
         {% if payment.state_reason %}
           <span class="muted">{{ payment.state_reason }}</span>
+        {% endif %}
+        {% if payment.state == "paid" and payment.claimed_at
+              and not payment.paid_direct_at %}
+        <p class="error">Paid in the app AND says they paid you
+          directly ({{ payment.claimed_via }}) — if both landed,
+          refund one (Stripe dashboard, tick reverse
+          transfer).</p>
         {% endif %}
         {% if payment.state == "unpaid" %}
         <form method="post"
@@ -81,6 +91,28 @@ the group after you tap this.</p>
               style="display:inline">
           <button>Get fresh link</button>
         </form>
+        {% if payment.claimed_at %}
+        <p>
+          <span class="badge">says they paid —
+            {{ payment.claimed_via }}</span>
+          <form method="post"
+                action="/admin/{{ event.admin_token }}/mark-paid/{{ payment.id }}"
+                style="display:inline">
+            <button>They paid me ✓</button>
+          </form>
+          <form method="post"
+                action="/admin/{{ event.admin_token }}/claim-reject/{{ payment.id }}"
+                style="display:inline">
+            <button>Didn't get it</button>
+          </form>
+        </p>
+        {% else %}
+        <form method="post"
+              action="/admin/{{ event.admin_token }}/mark-paid/{{ payment.id }}"
+              style="display:inline">
+          <button>Mark paid — paid me directly</button>
+        </form>
+        {% endif %}
         {% endif %}
         {% endif %}
         {% if attendee.id in poll_failed %}

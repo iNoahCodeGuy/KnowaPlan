@@ -58,12 +58,18 @@ via a tap-to-pay link.
 - none: no charge yet. Also the terminal state for no-shows and events
   cancelled before close — nothing owed, nothing charged
 - paid: the attendee's actual share was charged — automatically from a
-  card saved at RSVP, or via the tap-to-pay link. Terminal except for
+  card saved at RSVP, via the tap-to-pay link, or by the planner
+  confirming a direct payment (Venmo/Zelle/cash; paid_direct_at set,
+  charged_cents stays empty — Stripe collected nothing, so the Stripe
+  refund path never applies to these rows). Terminal except for
   refund
 - unpaid: close happened and the share was not collected — no card on
   file, or a saved-card charge declined off-session at close. The
   planner sends a tap-to-pay link (one auto-nudge at +24h, then on
-  demand). Shows on the roster. Not terminal
+  demand). Shows on the roster. Not terminal. May carry an attendee
+  claim ("I paid the planner directly" — a flag, never a state): the
+  row still counts as owed until the planner's confirming tap
+  performs unpaid → paid
 - abandoned: the planner stopped chasing. Terminal
 - refunded: reversal of a collected charge — planner discretion, or a
   re-split after a late walk-in lowered shares AFTER a charge landed.
@@ -72,7 +78,10 @@ via a tap-to-pay link.
 Transitions:
 - none → paid: card on file, charged successfully at close
 - none → unpaid: close with no card, or a saved-card charge declined
-- unpaid → paid: attendee pays via the tap-to-pay link
+- unpaid → paid: attendee pays via the tap-to-pay link, OR the
+  planner confirms a direct payment (any live link is expired
+  BEFORE the state write — a paid row must never leave a live
+  collection path behind)
 - unpaid → abandoned: planner stops chasing
 - paid → refunded: reverse a collected charge
 

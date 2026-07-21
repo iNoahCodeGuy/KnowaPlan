@@ -33,6 +33,7 @@ from app.payments import (
     CardSaveFailed,
     create_payment_link,
     create_setup_intent,
+    mark_paid_direct,
     poll_link_status,
     record_saved_card,
 )
@@ -56,6 +57,11 @@ templates = Jinja2Templates(
 )
 
 SETTLE_DEFAULTS = ("assume_all_attended", "mark_all_absent")
+
+# The rails an attendee may claim to have paid the planner on —
+# fixed so the roster chip tells the planner which feed to check.
+# The planner's handles stay free text; this list is the claim's.
+CLAIM_VIAS = ("venmo", "zelle", "apple_cash", "cash", "other")
 
 
 def _dollars(cents: int) -> str:
@@ -185,6 +191,7 @@ async def create_event(
     total_cost_dollars: str = Form(...),
     goal_attendance: int = Form(...),
     settle_default: str = Form(...),
+    payment_handles: str = Form(""),
     create_password: str = Form(""),
 ) -> Response:
     form = {
@@ -195,6 +202,7 @@ async def create_event(
         "total_cost_dollars": total_cost_dollars,
         "goal_attendance": str(goal_attendance),
         "settle_default": settle_default,
+        "payment_handles": payment_handles,
     }
 
     def fail(message: str) -> Response:
@@ -256,6 +264,10 @@ async def create_event(
         )
         session.add(planner)
         await session.flush()
+    if payment_handles.strip():
+        # Handles belong to the person, not the event: a non-empty
+        # value updates the planner's stored copy; blank keeps it.
+        planner.payment_handles = payment_handles.strip()
     event = Event(
         planner_id=planner.id,
         title=title,
@@ -621,6 +633,50 @@ async def my_events_page(
     )
 
 
+@router.post("/r/{token}/claim")
+async def claim_paid_direct(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+    via: str = Form(...),
+) -> Response:
+    """Attendee's "I paid the planner directly". Sets a FLAG on the
+    unpaid row — never a state: the roster keeps counting this as
+    owed (never assume collected, CLAUDE.md) until the planner's
+    confirming tap performs unpaid -> paid."""
+    rsvp = await _rsvp_by_token(session, token)
+    if rsvp is None:
+        return _not_found(request)
+    if via not in CLAIM_VIAS:
+        return _cannot(request, f"not a payment method: {via!r}")
+    payment = (
+        (
+            await session.execute(
+                select(Payment)
+                .where(
+                    Payment.event_id == rsvp.event_id,
+                    Payment.attendee_id == rsvp.attendee_id,
+                )
+                .order_by(Payment.attempt.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if payment is None or payment.state != "unpaid":
+        return _cannot(
+            request,
+            "there's no outstanding share to claim on — this "
+            "page updates once settle-up runs",
+        )
+    # Last claim wins: a re-claim (picked the wrong rail) simply
+    # overwrites.
+    payment.claimed_at = datetime.now(timezone.utc)
+    payment.claimed_via = via
+    await session.commit()
+    return RedirectResponse(f"/r/{token}", status_code=303)
+
+
 def _settle_math(
     event: Event,
     rows: list[tuple[Rsvp, Attendee]],
@@ -884,6 +940,67 @@ async def fresh_link_route(
             "token": token,
         },
     )
+
+
+@router.post("/admin/{token}/mark-paid/{payment_id}")
+async def mark_paid_route(
+    request: Request,
+    token: str,
+    payment_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Planner confirms an out-of-band payment (or records one no
+    claim preceded — cash courtside). mark_paid_direct kills any
+    live link BEFORE the row says paid; its refusals surface here
+    with the recovery spelled out."""
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    payment = await session.get(Payment, payment_id)
+    if payment is None or payment.event_id != event.id:
+        return _not_found(request)
+    try:
+        await mark_paid_direct(payment)
+    except ValueError as err:
+        # e.g. the link already collected — the next roster load's
+        # poll records it, and the claim flag surfaces the double.
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {"message": f"{err} — reload the roster."},
+            status_code=409,
+        )
+    except stripe.StripeError:
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {"message": "Stripe is unreachable — try again."},
+            status_code=502,
+        )
+    await session.commit()
+    return RedirectResponse(f"/admin/{token}", status_code=303)
+
+
+@router.post("/admin/{token}/claim-reject/{payment_id}")
+async def claim_reject_route(
+    request: Request,
+    token: str,
+    payment_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Planner didn't get the money: clear the claim, the row was
+    honestly `unpaid` all along. Idempotent — a double-tap or an
+    already-cleared claim just lands back on the roster."""
+    event = await _event_by_admin_token(session, token)
+    if event is None:
+        return _not_found(request)
+    payment = await session.get(Payment, payment_id)
+    if payment is None or payment.event_id != event.id:
+        return _not_found(request)
+    payment.claimed_at = None
+    payment.claimed_via = None
+    await session.commit()
+    return RedirectResponse(f"/admin/{token}", status_code=303)
 
 
 @router.get("/admin/{token}/settle")
