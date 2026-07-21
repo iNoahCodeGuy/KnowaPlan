@@ -37,6 +37,7 @@ from app.payments import (
     poll_link_status,
     record_saved_card,
 )
+from app.phone import normalize_phone
 from app.rsvps import (
     EventNotOpen,
     allowed_choices,
@@ -234,6 +235,12 @@ async def create_event(
     title = title.strip()
     if not (planner_name and planner_phone and title):
         return fail("name, phone and title are required")
+    try:
+        # Canonical digits, same as the RSVP side — the planner
+        # auto-link (never charged) depends on the two matching.
+        planner_phone = normalize_phone(planner_phone)
+    except ValueError as err:
+        return fail(str(err))
     try:
         total_cents = parse_dollars_to_cents(total_cost_dollars)
         starts = _parse_starts_at(starts_at)

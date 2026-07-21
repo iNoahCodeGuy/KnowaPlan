@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Attendee, Event, Planner, Rsvp
+from app.phone import normalize_phone
 from app.state_machines import RSVP, can_transition
 
 # The answers an attendee may pick on /r/ — the response states.
@@ -52,6 +53,10 @@ async def get_or_create_rsvp(
     name, phone = name.strip(), phone.strip()
     if not name or not phone:
         raise ValueError("name and phone are required")
+    # One spelling per person: autofill formatting must find the
+    # same row as typed digits, or the duplicate orphans a saved
+    # card and dodges the planner match (app/phone.py).
+    phone = normalize_phone(phone)
     attendee = (
         await session.execute(
             select(Attendee).where(Attendee.phone == phone)
@@ -62,9 +67,19 @@ async def get_or_create_rsvp(
         session.add(attendee)
         await session.flush()  # assigns attendee.id for the rows below
     planner = await session.get(Planner, event.planner_id)
+    try:
+        planner_phone = (
+            None
+            if planner is None
+            else normalize_phone(planner.phone)
+        )
+    except ValueError:
+        # A stored planner phone that can't normalize (legacy row)
+        # simply never auto-links; the wipe re-mints canonical rows.
+        planner_phone = None
     if (
         planner is not None
-        and planner.phone == phone
+        and planner_phone == phone
         and planner.attendee_id != attendee.id
     ):
         # A playing planner RSVPs like anyone (decisions.md
