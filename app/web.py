@@ -155,6 +155,18 @@ async def _rsvp_by_token(
     ).scalar_one_or_none()
 
 
+async def _attendee_by_me_token(
+    session: AsyncSession, token: str
+) -> Attendee | None:
+    return (
+        await session.execute(
+            select(Attendee).where(
+                Attendee.attendee_token == token
+            )
+        )
+    ).scalar_one_or_none()
+
+
 @router.get("/")
 async def create_event_form(request: Request) -> Response:
     return templates.TemplateResponse(
@@ -574,6 +586,39 @@ async def setup_intent_endpoint(
         )
     await session.commit()  # persist stripe_customer_id
     return JSONResponse({"client_secret": secret})
+
+
+@router.get("/me/{token}")
+async def my_events_page(
+    request: Request,
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Cross-event "your events" list, VIEW-ONLY: no /r/ links,
+    no buttons — a leaked bookmark shows a schedule but cannot
+    answer for anyone (the per-event containment of decisions.md
+    2026-07-16 is preserved by construction). Filter by event
+    STATE, not clock: starts_at is display-only in v0, so
+    open/closed is the honest meaning of "upcoming"."""
+    attendee = await _attendee_by_me_token(session, token)
+    if attendee is None:
+        return _not_found(request)
+    rows = (
+        await session.execute(
+            select(Rsvp, Event)
+            .join(Event, Rsvp.event_id == Event.id)
+            .where(
+                Rsvp.attendee_id == attendee.id,
+                Event.state.in_(("open", "closed")),
+            )
+            .order_by(Event.starts_at)
+        )
+    ).all()
+    return templates.TemplateResponse(
+        request,
+        "me.html",
+        {"attendee": attendee, "rows": rows},
+    )
 
 
 def _settle_math(

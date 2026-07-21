@@ -68,6 +68,14 @@ class Attendee(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(32), unique=True)
+    # /me/{attendee_token}: this attendee's cross-event "your
+    # events" page — VIEW-ONLY, so a leaked link shows a schedule
+    # but changes nothing. Answers still move only via the
+    # per-event /r/ token; the one-event blast radius of
+    # decisions.md 2026-07-16 survives this column.
+    attendee_token: Mapped[str] = mapped_column(
+        String(32), unique=True, default=_mint_token
+    )
     # Card on file lives on the PLATFORM account — a Stripe
     # constraint for destination charges (see skeleton_02). The card
     # is saved at RSVP via a SetupIntent (charge-at-close, no hold —

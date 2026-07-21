@@ -58,6 +58,16 @@ async def test_event_insert_mints_both_tokens(
     assert event.event_token != event.admin_token
 
 
+async def test_attendee_insert_mints_me_token(
+    db_session: AsyncSession,
+) -> None:
+    attendee = Attendee(name="Sam", phone="+15550000002")
+    db_session.add(attendee)
+    await db_session.commit()
+    assert len(attendee.attendee_token) == 22
+    assert set(attendee.attendee_token) <= URL_SAFE
+
+
 async def test_rsvp_insert_mints_token(
     db_session: AsyncSession,
 ) -> None:

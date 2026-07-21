@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Your events — KnowaPlan{% endblock %}
+{% block content %}
+<h1>Your events</h1>
+<p class="muted">Hi {{ attendee.name }} — bookmark this page to
+  find your upcoming games.</p>
+
+{% if rows %}
+<ul class="people">
+  {% for rsvp, event in rows %}
+  <li class="person">
+    <div class="person-head">
+      <span class="person-name">{{ event.title }}</span>
+      <span class="badge">{{ rsvp.state }}</span>
+    </div>
+    <p class="person-meta">
+      Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+      about {{ event.estimated_share_cents | dollars }}/person
+      {% if event.state == "closed" %}
+      <span class="muted">· RSVPs closed</span>
+      {% endif %}
+    </p>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No upcoming events yet. When you RSVP to one, it shows up
+  here.</p>
+{% endif %}
+
+<p class="muted">To change an answer, open that event's RSVP link
+  from your texts.</p>
+{% endblock %}
