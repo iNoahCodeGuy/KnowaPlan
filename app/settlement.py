@@ -15,7 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Attendee, Event, Payment, Planner, Rsvp
-from app.payments import charge_share, create_payment_link
+from app.payments import (
+    MIN_CHARGE_CENTS,
+    charge_share,
+    create_payment_link,
+)
 from app.state_machines import (
     ATTENDANCE,
     EVENT,
@@ -236,6 +240,17 @@ async def settle_event(
         for rsvp, attendee in participants
         if attendee.id != planner.attendee_id
     ]
+    if charged and 0 < charge < MIN_CHARGE_CENTS:
+        # Stripe refuses sub-50¢ charges (phone walk 2026-07-19:
+        # they landed dangling with no explanation). Refuse LOUDLY
+        # before any record-first stamp or present-marking — a
+        # UI-only guard would let a direct POST through. A $0
+        # settle (charge nobody) stays valid.
+        raise ValueError(
+            f"the per-person charge ({charge}¢) is under "
+            "Stripe's 50¢ minimum — raise the total cost, or "
+            "cancel the event"
+        )
     outcomes: list[Outcome] = []
     for rsvp, attendee in charged:
         prior = existing.get(attendee.id)

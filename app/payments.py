@@ -54,6 +54,15 @@ from app.models import Attendee, Payment, Planner
 from app.state_machines import PAYMENT, can_transition
 
 
+# Stripe's minimum charge (USD). Charges under it are refused by
+# Stripe — proven on the phone walk 2026-07-19, where a $1÷3 event
+# landed every charge dangling. settle_event guards on this BEFORE
+# stamping anything; it is deliberately NOT a floor inside
+# _validate_cents, because a future partial refund can
+# legitimately be under 50¢.
+MIN_CHARGE_CENTS = 50
+
+
 class CardSaveFailed(Exception):
     """The SetupIntent did not succeed — the attendee retries with
     another card or proceeds cardless (scenarios.md: card fails to

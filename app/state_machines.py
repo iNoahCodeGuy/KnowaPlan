@@ -21,14 +21,16 @@ EVENT: dict[str, set[str]] = {
 # RSVP: a card on file is OPTIONAL and tracked on the Payment row,
 # not here (charge-at-close, decisions.md 2026-07-15) — so `going`
 # goes straight to attended/no_show, with no going_paid gate.
-# declined → going (decisions.md 2026-07-08) is valid only while
-# the Event is open — that guard lives in the service layer; this
-# table has no event context.
+# Uniform rule (decisions.md 2026-07-21): any answer to any answer
+# — {going, maybe, declined} are mutually reachable. Every answer
+# change is valid only while the Event is open — that guard lives
+# in the service layer; this table has no event context.
+# attended/no_show are the planner's writes at settlement.
 RSVP: dict[str, set[str]] = {
     "pending": {"going", "maybe", "declined"},
-    "going": {"attended", "no_show"},
+    "going": {"maybe", "declined", "attended", "no_show"},
     "maybe": {"going", "declined"},
-    "declined": {"going"},
+    "declined": {"going", "maybe"},
     "attended": set(),
     "no_show": set(),
 }

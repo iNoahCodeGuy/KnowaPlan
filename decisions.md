@@ -578,3 +578,30 @@ a wrong identity at settle; v0 is one US metro.
 attendee (divisor undercounts). Deferred on purpose — the 7/29
 invite says "each person uses their own number"; a
 confirm-identity step is a post-7/29 fork.
+
+## 2026-07-21: Uniform RSVP rule — any answer to any answer while open
+**Amends** the RSVP machine and retires the 2026-07-16 "backing
+out is planner territory" note — a hold-era fossil: backing out
+used to mean releasing a hold; with charge-at-close it just means
+changing your mind before close. Adds going → maybe|declined and
+declined → maybe: the answer set {going, maybe, declined} is now
+mutually reachable while the event is open (pending → any, as
+before). The open-event guard already scopes every change;
+attended/no_show stay planner-only writes at settlement, and the
+CHOICES membership check still blocks a crafted self-"attended"
+POST. UI followed with no template change — buttons derive from
+the table (allowed_choices), so a going attendee gains Maybe and
+Can't-make-it instead of "text the planner".
+
+## 2026-07-21: Sub-50¢ shares refused before any stamp
+**Found (phone walk 2026-07-19):** Stripe refuses charges under
+50¢ — a $1÷3 test event landed every charge dangling and link
+mints failed with no explanation. **Chose:** settle_event raises
+BEFORE any record-first stamp or present-marking when a nonzero
+per-person charge is under MIN_CHARGE_CENTS (app/payments.py);
+the settle preview mirrors the guard (no settle button it would
+refuse; the cap button hides when the estimate is under 50¢).
+Service-level on purpose — a UI-only guard lets a direct POST
+through. Deliberately NOT a floor in _validate_cents: a future
+partial refund can legitimately be under 50¢. Settling a $0
+share (charge nobody) stays valid.

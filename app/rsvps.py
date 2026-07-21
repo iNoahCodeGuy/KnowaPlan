@@ -104,9 +104,10 @@ async def get_or_create_rsvp(
 
 def allowed_choices(rsvp: Rsvp) -> tuple[str, ...]:
     """The answer buttons /r/ may render: legal transitions from
-    the current state, response states only. A `going` attendee
-    gets none — backing out is planner territory (no_show at
-    settlement); the UI can never offer an illegal move."""
+    the current state, response states only. Uniform rule
+    (decisions.md 2026-07-21): any answer may become any other
+    while the event is open, so every response state offers the
+    other two; the UI can never offer an illegal move."""
     return tuple(
         c for c in CHOICES if can_transition(RSVP, rsvp.state, c)
     )

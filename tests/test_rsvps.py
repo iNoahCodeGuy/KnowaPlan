@@ -145,12 +145,12 @@ async def test_legal_responses(
 
 
 @pytest.mark.parametrize("choice", ["declined", "maybe"])
-async def test_going_cannot_back_out(
+async def test_going_backs_out_self_service(
     db_session: AsyncSession, choice: str
 ) -> None:
-    """going → attended|no_show only (state_machines.md): backing
-    out is the planner's call at settlement, not a self-service
-    transition."""
+    """Uniform rule (decisions.md 2026-07-21): backing out is
+    self-service while the event is open — the hold-era
+    planner-territory rule is retired (no hold to release)."""
     planner = await _planner(db_session)
     event = await _event(db_session, planner)
     rsvp = await get_or_create_rsvp(
@@ -158,8 +158,8 @@ async def test_going_cannot_back_out(
     )
     rsvp.state = "going"
     await db_session.commit()
-    with pytest.raises(ValueError):
-        await respond(db_session, rsvp, event, choice)
+    result = await respond(db_session, rsvp, event, choice)
+    assert result.state == choice
 
 
 async def test_same_choice_is_noop(
@@ -210,13 +210,14 @@ async def test_attendee_cannot_self_mark_attendance(
 
 
 def test_allowed_choices_per_state() -> None:
-    """What /r/ may render, straight from the table — a `going`
-    attendee gets no buttons at all."""
+    """What /r/ may render, straight from the table — uniform
+    rule (decisions.md 2026-07-21): every response state offers
+    the other two."""
     expectations = {
         "pending": ("going", "maybe", "declined"),
         "maybe": ("going", "declined"),
-        "declined": ("going",),
-        "going": (),
+        "declined": ("going", "maybe"),
+        "going": ("maybe", "declined"),
     }
     for state, expected in expectations.items():
         assert allowed_choices(Rsvp(state=state)) == expected

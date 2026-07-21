@@ -30,6 +30,7 @@ from app.db import get_session
 from app.events import cancel_event, open_rsvps
 from app.models import Attendee, Event, Payment, Planner, Rsvp
 from app.payments import (
+    MIN_CHARGE_CENTS,
     CardSaveFailed,
     create_payment_link,
     create_setup_intent,
@@ -766,6 +767,15 @@ def _settle_math(
     return {
         "participants": divisor,
         "share": share,
+        # Mirrors settle_event's sub-50¢ refusal — the preview
+        # must never offer a settle the service will refuse.
+        "too_small": (
+            chargeable > 0 and 0 < share < MIN_CHARGE_CENTS
+        ),
+        "cap_too_small": (
+            chargeable > 0
+            and 0 < event.estimated_share_cents < MIN_CHARGE_CENTS
+        ),
         "chargeable": chargeable,
         "unmarked": unmarked,
         "maybes": maybes,

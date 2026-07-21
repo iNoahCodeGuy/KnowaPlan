@@ -35,7 +35,24 @@ the group after you tap this.</p>
 {% endif %}
 
 <h2>Share link</h2>
-<p><code>{{ share_link }}</code></p>
+<p><code>{{ share_link }}</code>
+<button type="button" id="copy-share">Copy</button></p>
+<script>
+// Clipboard needs HTTPS (the deploy has it); the selectable
+// code block above stays the no-JS fallback. Kills the 7/19
+// phone-walk paste that dropped the token off the link.
+document.getElementById("copy-share").addEventListener(
+  "click", async function () {
+    var btn = this;
+    try {
+      await navigator.clipboard.writeText(
+        {{ share_link | tojson }});
+      btn.textContent = "Copied ✓";
+    } catch (e) {
+      btn.textContent = "Copy failed — long-press the link";
+    }
+  });
+</script>
 
 <h2>Roster</h2>
 {% if rows %}

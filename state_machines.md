@@ -31,18 +31,19 @@ Transitions:
   cancellation
 
 ## RSVP
-pending → going → attended | no_show
-       → maybe → going | declined
-       → declined → going (while event still open)
+pending → going | maybe | declined
+going ↔ maybe ↔ declined — any answer to any answer while the
+event is open (uniform rule, decisions.md 2026-07-21)
+going → attended | no_show (planner, at settlement)
 
 - pending: invitee clicked link but hasn't responded
 - going: said yes. A card on file is OPTIONAL and tracked on the
   Payment row, not here — a `going` attendee may or may not have saved
   a card (decisions.md 2026-07-15); the roster shows whether they have
 - maybe: tentative; converts on reminder or by deadline
-- declined: said no; may still convert to going while the event is
-  open — no card required to say going (a card is optional and, if
-  added, charged at close). Not terminal
+- declined: said no; like every answer it may become any other
+  while the event is open — no card required to say going (a card
+  is optional and, if added, charged at close). Not terminal
 - attended: planner marked present; their share is charged at close
 - no_show: planner marked absent; nothing charged (no hold to void)
 

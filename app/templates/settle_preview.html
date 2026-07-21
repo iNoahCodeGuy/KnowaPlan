@@ -37,6 +37,12 @@ If they played, have them tap Going on their own link
 <p class="muted">Settling closes RSVPs first.</p>
 {% endif %}
 
+{% if too_small %}
+<p class="error">The per-person share ({{ share | dollars }}) is
+under Stripe's 50¢ minimum, so cards can't be charged. Raise the
+total cost, or cancel the event — settling is blocked either
+way.</p>
+{% else %}
 <form class="settle-choices" method="post"
       action="/admin/{{ event.admin_token }}/settle"
       data-wait="Settling {{ participants }}
@@ -48,15 +54,18 @@ page open until the report loads.">
   call — the default is charging the actual share:</p>
   <button class="primary" name="mode" value="actual">
     Charge actual shares ({{ share | dollars }} each)</button>
+  {% if not cap_too_small %}
   <button name="mode" value="cap">
     Cap at the estimate
     ({{ event.estimated_share_cents | dollars }} each) —
     I absorb {{ capped_shortfall | dollars }}</button>
+  {% endif %}
 {% else %}
   <button class="primary" name="mode"
           value="actual">Settle now</button>
 {% endif %}
 </form>
+{% endif %}
 <p><a href="/admin/{{ event.admin_token }}">Back to the
 roster</a></p>
 {% endblock %}

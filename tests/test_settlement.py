@@ -1018,3 +1018,37 @@ class TestGrossUp:
             mock_stripe.PaymentIntent.create_async.await_args_list
         )
         assert [c.kwargs["amount"] for c in calls] == [3121] * 3
+
+
+async def test_sub_minimum_share_refused_before_any_stamp(
+    db_session: AsyncSession, mock_stripe: MagicMock
+) -> None:
+    """Phone walk 2026-07-19: a $1÷3 event put every charge under
+    Stripe's 50¢ floor — they landed dangling with no explanation.
+    The guard refuses LOUDLY before any record-first stamp, so
+    nothing is half-settled."""
+    event = await _seed_event(
+        db_session,
+        total_cost_cents=100,
+        estimated_share_cents=33,
+        state="closed",
+    )
+    for phone in (
+        "+15550000003",
+        "+15550000004",
+        "+15550000005",
+    ):
+        await _seed_present_carded(db_session, event, phone)
+    planner = await db_session.get(Planner, event.planner_id)
+    assert planner is not None
+    with pytest.raises(ValueError, match="50"):
+        await settle_event(
+            db_session,
+            event,
+            planner,
+            success_url="https://x/paid",
+        )
+    assert await _payments(db_session) == []
+    await db_session.refresh(event)
+    assert event.state == "closed"
+    mock_stripe.PaymentIntent.create_async.assert_not_called()

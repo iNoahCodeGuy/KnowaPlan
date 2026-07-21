@@ -37,10 +37,14 @@ LEGAL: set[tuple[str, str, str]] = {
     ("rsvp", "pending", "declined"),
     ("rsvp", "going", "attended"),
     ("rsvp", "going", "no_show"),
+    # uniform rule (decisions.md 2026-07-21): any answer to any
+    # answer while the event is open
+    ("rsvp", "going", "maybe"),
+    ("rsvp", "going", "declined"),
     ("rsvp", "maybe", "going"),
     ("rsvp", "maybe", "declined"),
-    # late re-RSVP while event open — decisions.md 2026-07-08
     ("rsvp", "declined", "going"),
+    ("rsvp", "declined", "maybe"),
     # Payment — charge-at-close (decisions.md 2026-07-15)
     ("payment", "none", "paid"),
     ("payment", "none", "unpaid"),

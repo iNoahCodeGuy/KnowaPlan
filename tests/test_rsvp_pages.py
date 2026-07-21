@@ -181,9 +181,11 @@ async def test_pending_shows_three_buttons(
         assert f'value="{choice}"' in page.text
 
 
-async def test_respond_moves_state_then_no_buttons(
+async def test_respond_uniform_rule_round_trip(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    # Uniform rule (decisions.md 2026-07-21): a going attendee
+    # can back out and come back, all self-service while open.
     event = await _open_event(db_session)
     rsvp = await _sam_rsvp(db_session, event)
     resp = await client.post(
@@ -193,19 +195,32 @@ async def test_respond_moves_state_then_no_buttons(
     await db_session.refresh(rsvp)
     assert rsvp.state == "going"
     page = await client.get(f"/r/{rsvp.rsvp_token}")
-    # going → attended|no_show only: no self-service back-out
-    assert 'value="declined"' not in page.text
-    assert "Text\n    Noah" in page.text or "Text Noah" in page.text
+    assert 'value="declined"' in page.text
+    assert 'value="maybe"' in page.text
+    resp = await client.post(
+        f"/r/{rsvp.rsvp_token}/respond",
+        data={"choice": "declined"},
+    )
+    assert resp.status_code == 303
+    resp = await client.post(
+        f"/r/{rsvp.rsvp_token}/respond", data={"choice": "going"}
+    )
+    assert resp.status_code == 303
+    await db_session.refresh(rsvp)
+    assert rsvp.state == "going"
 
 
 async def test_illegal_response_is_400(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
+    # Under the uniform rule every answer↔answer move is legal,
+    # so the illegal POST that matters is the crafted one: an
+    # attendee trying to write their own attendance.
     event = await _open_event(db_session)
     rsvp = await _sam_rsvp(db_session, event, state="going")
     resp = await client.post(
         f"/r/{rsvp.rsvp_token}/respond",
-        data={"choice": "declined"},
+        data={"choice": "attended"},
     )
     assert resp.status_code == 400
 
