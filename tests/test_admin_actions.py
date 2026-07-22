@@ -4,6 +4,7 @@ Pins: auto-close on first mark, ownership checks (an admin token
 never reaches another event's rows), the cancel money-guard, and
 the dangling-retry / re-mint flows against the mocked Stripe.
 """
+
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -23,9 +24,7 @@ async def _event(
     state: str = "open",
     phone: str = PLANNER_PHONE,
 ) -> Event:
-    planner = Planner(
-        name="Noah", phone=phone, stripe_account_id="acct_demo"
-    )
+    planner = Planner(name="Noah", phone=phone, stripe_account_id="acct_demo")
     session.add(planner)
     await session.flush()
     event = Event(
@@ -109,9 +108,7 @@ async def test_mark_maybe_is_refused(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     event = await _event(db_session)
-    rsvp = await get_or_create_rsvp(
-        db_session, event, "Sam", SAM_PHONE
-    )
+    rsvp = await get_or_create_rsvp(db_session, event, "Sam", SAM_PHONE)
     rsvp.state = "maybe"
     await db_session.commit()
     resp = await client.post(
@@ -244,17 +241,11 @@ async def test_retry_dangling_lands_paid(
     attendee.stripe_customer_id = "cus_1"
     attendee.stripe_payment_method_id = "pm_1"
     await db_session.commit()
-    payment = await _dangling_payment(
-        db_session, event, attendee.id
-    )
+    payment = await _dangling_payment(db_session, event, attendee.id)
     mock_stripe.PaymentIntent.create_async = AsyncMock(
-        return_value=SimpleNamespace(
-            id="pi_retry", status="succeeded"
-        )
+        return_value=SimpleNamespace(id="pi_retry", status="succeeded")
     )
-    resp = await client.post(
-        f"/admin/{event.admin_token}/retry/{payment.id}"
-    )
+    resp = await client.post(f"/admin/{event.admin_token}/retry/{payment.id}")
     assert resp.status_code == 200
     assert "paid" in resp.text
     await db_session.refresh(payment)
@@ -263,9 +254,7 @@ async def test_retry_dangling_lands_paid(
     # Same-key retry: the stamped amount went to Stripe verbatim
     kwargs = mock_stripe.PaymentIntent.create_async.call_args
     assert kwargs.kwargs["amount"] == 3000
-    assert (
-        kwargs.kwargs["idempotency_key"] == f"{payment.id}:charge"
-    )
+    assert kwargs.kwargs["idempotency_key"] == f"{payment.id}:charge"
 
 
 async def test_retry_dangling_cardless_mints_link(
@@ -277,18 +266,14 @@ async def test_retry_dangling_cardless_mints_link(
     rsvp = await _going(db_session, event)
     event.state = "closed"
     await db_session.commit()
-    payment = await _dangling_payment(
-        db_session, event, rsvp.attendee_id
-    )
+    payment = await _dangling_payment(db_session, event, rsvp.attendee_id)
     mock_stripe.checkout.Session.create_async = AsyncMock(
         return_value=SimpleNamespace(
             id="cs_new",
             url="https://checkout.stripe.test/pay/cs_new",
         )
     )
-    resp = await client.post(
-        f"/admin/{event.admin_token}/retry/{payment.id}"
-    )
+    resp = await client.post(f"/admin/{event.admin_token}/retry/{payment.id}")
     assert resp.status_code == 200
     assert "https://checkout.stripe.test/pay/cs_new" in resp.text
     assert "sms:" in resp.text
@@ -312,9 +297,7 @@ async def test_retry_non_dangling_is_400(
     )
     db_session.add(payment)
     await db_session.commit()
-    resp = await client.post(
-        f"/admin/{event.admin_token}/retry/{payment.id}"
-    )
+    resp = await client.post(f"/admin/{event.admin_token}/retry/{payment.id}")
     assert resp.status_code == 400
     mock_stripe.PaymentIntent.create_async.assert_not_called()
 
@@ -339,9 +322,7 @@ async def test_fresh_link_remints_and_retires(
     db_session.add(payment)
     await db_session.commit()
     mock_stripe.checkout.Session.retrieve_async = AsyncMock(
-        return_value=SimpleNamespace(
-            payment_status="unpaid", status="open"
-        )
+        return_value=SimpleNamespace(payment_status="unpaid", status="open")
     )
     mock_stripe.checkout.Session.expire_async = AsyncMock()
     mock_stripe.checkout.Session.create_async = AsyncMock(
@@ -350,14 +331,10 @@ async def test_fresh_link_remints_and_retires(
             url="https://checkout.stripe.test/pay/cs_new2",
         )
     )
-    resp = await client.post(
-        f"/admin/{event.admin_token}/link/{payment.id}"
-    )
+    resp = await client.post(f"/admin/{event.admin_token}/link/{payment.id}")
     assert resp.status_code == 200
     assert "cs_new2" in resp.text
-    mock_stripe.checkout.Session.expire_async.assert_called_once_with(
-        "cs_old"
-    )
+    mock_stripe.checkout.Session.expire_async.assert_called_once_with("cs_old")
     await db_session.refresh(payment)
     assert payment.stripe_checkout_session_id == "cs_new2"
 
@@ -383,14 +360,79 @@ async def test_fresh_link_refused_when_old_collected(
     db_session.add(payment)
     await db_session.commit()
     mock_stripe.checkout.Session.retrieve_async = AsyncMock(
-        return_value=SimpleNamespace(
-            payment_status="paid", status="complete"
-        )
+        return_value=SimpleNamespace(payment_status="paid", status="complete")
     )
-    resp = await client.post(
-        f"/admin/{event.admin_token}/link/{payment.id}"
-    )
+    resp = await client.post(f"/admin/{event.admin_token}/link/{payment.id}")
     assert resp.status_code == 409
     mock_stripe.checkout.Session.create_async.assert_not_called()
     await db_session.refresh(payment)
     assert payment.stripe_checkout_session_id == "cs_paid"
+
+
+async def test_attendance_buttons_gated_to_closed(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """F2: no present/absent while OPEN — an accidental tap must
+    not end RSVPs early. They appear once RSVPs are closed."""
+    event = await _event(db_session)  # open
+    await _going(db_session, event)
+    open_page = await client.get(f"/admin/{event.admin_token}")
+    assert 'name="present"' not in open_page.text
+    assert "turns on once you close" in open_page.text
+    event.state = "closed"
+    await db_session.commit()
+    closed_page = await client.get(f"/admin/{event.admin_token}")
+    assert 'name="present"' in closed_page.text
+
+
+async def test_cancel_confirm_blocked_tells_the_truth(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """F3: GET /cancel where money moved must not promise 'nothing
+    charged' over a button that can only 400."""
+    event = await _event(db_session, state="closed")
+    attendee = Attendee(name="Sam", phone=SAM_PHONE)
+    db_session.add(attendee)
+    await db_session.flush()
+    db_session.add(
+        Payment(
+            event_id=event.id,
+            attendee_id=attendee.id,
+            attempt=1,
+            state="paid",
+            charged_cents=3000,
+        )
+    )
+    await db_session.commit()
+    resp = await client.get(f"/admin/{event.admin_token}/cancel")
+    assert resp.status_code == 200
+    assert "Nothing has been charged" not in resp.text
+    assert "locked" in resp.text
+    assert "Yes — cancel the event" not in resp.text
+
+
+async def test_retry_stripe_down_is_human_502(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    mock_stripe: MagicMock,
+) -> None:
+    """F4: a Stripe outage on retry reads in human words, with no
+    internal doc reference leaked to the planner."""
+    event = await _event(db_session, state="closed")
+    event.state = "open"
+    await db_session.commit()
+    rsvp = await _going(db_session, event)
+    event.state = "closed"
+    attendee = await db_session.get(Attendee, rsvp.attendee_id)
+    assert attendee is not None
+    attendee.stripe_customer_id = "cus_1"
+    attendee.stripe_payment_method_id = "pm_1"
+    await db_session.commit()
+    payment = await _dangling_payment(db_session, event, attendee.id)
+    mock_stripe.PaymentIntent.create_async = AsyncMock(
+        side_effect=RuntimeError("stripe down")
+    )
+    resp = await client.post(f"/admin/{event.admin_token}/retry/{payment.id}")
+    assert resp.status_code == 502
+    assert "reach Stripe" in resp.text  # the new human heading
+    assert "decisions.md" not in resp.text

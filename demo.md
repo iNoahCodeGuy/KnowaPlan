@@ -60,10 +60,12 @@ from planner to attendee — the links are the only identity.
      card-save finalize.
    - Lost /r/ link? Re-enter the same phone on the share link —
      same row, same page.
-4. **Mark attendance** on the admin roster (the first mark
-   closes RSVPs automatically). Mark fewer people present than
-   your goal to make the true share exceed the estimate — that's
-   what makes the cap-and-absorb choice appear at settle.
+4. **Close RSVPs, then mark attendance.** Tap "Close RSVPs" — the
+   present/absent buttons appear once it's closed (marking while
+   open is off, so a stray tap can't end RSVPs early). Mark fewer
+   people present than your goal to make the true share exceed the
+   estimate — that's what makes the cap-and-absorb choice appear
+   at settle.
 5. **Settle up**: read the preview — the split, what your
    settle default will do to unmarked rows, who's still maybe.
    Choose: charge actual (default) or cap at the estimate and

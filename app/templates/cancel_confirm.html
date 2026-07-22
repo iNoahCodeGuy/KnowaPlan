@@ -5,6 +5,15 @@
   Event home</a></p>
 {% endblock %}
 {% block content %}
+{% if blocked %}
+<h1>Can't cancel {{ event.title }}</h1>
+<p>A settle run already moved money for this event, so cancelling
+is locked — it would stamp "nothing charged" onto an event where
+money moved. Finish settling instead: retry any flagged charge, or
+send the remaining payment links.</p>
+<p><a href="/admin/{{ event.admin_token }}">Back to the
+roster</a></p>
+{% else %}
 <h1>Cancel {{ event.title }}?</h1>
 <p>Nothing has been charged (there are no holds to release —
 charge-at-close). Everyone's link will show the event as
@@ -14,4 +23,5 @@ cancelled.</p>
 </form>
 <p><a href="/admin/{{ event.admin_token }}">Back to the
 roster</a></p>
+{% endif %}
 {% endblock %}

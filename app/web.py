@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_session
-from app.events import cancel_event, open_rsvps
+from app.events import cancel_blocked, cancel_event, open_rsvps
 from app.models import Attendee, Event, Payment, Planner, Rsvp
 from app.payments import (
     MIN_CHARGE_CENTS,
@@ -846,7 +846,12 @@ async def cancel_confirm(
     if event is None:
         return _not_found(request)
     return templates.TemplateResponse(
-        request, "cancel_confirm.html", {"event": event}
+        request,
+        "cancel_confirm.html",
+        {
+            "event": event,
+            "blocked": await cancel_blocked(session, event),
+        },
     )
 
 
@@ -898,9 +903,12 @@ async def retry_route(
             request,
             "error.html",
             {
-                "message": "Stripe is unreachable — the row stays "
-                "flagged, and retrying again is safe (same "
-                "idempotency key, decisions.md 2026-07-13).",
+                "heading": "Couldn't reach Stripe",
+                "message": "Stripe didn't answer, so this charge is "
+                "still unconfirmed. Nothing was double-charged — "
+                "tapping Retry re-sends the exact same charge. It's "
+                "still flagged on your roster; try again in a "
+                "minute.",
             },
             status_code=502,
         )
@@ -959,7 +967,12 @@ async def fresh_link_route(
         return templates.TemplateResponse(
             request,
             "error.html",
-            {"message": "Stripe is unreachable — try again."},
+            {
+                "heading": "Couldn't reach Stripe",
+                "message": "Stripe didn't answer, so no new link "
+                "was created. Try again in a minute — they're still "
+                "marked unpaid on your roster.",
+            },
             status_code=502,
         )
     await session.commit()  # the row now points at the new session
@@ -1009,7 +1022,11 @@ async def mark_paid_route(
         return templates.TemplateResponse(
             request,
             "error.html",
-            {"message": "Stripe is unreachable — try again."},
+            {
+                "heading": "Couldn't reach Stripe",
+                "message": "Stripe didn't answer, so this wasn't "
+                "saved as paid. Try again in a minute.",
+            },
             status_code=502,
         )
     await session.commit()

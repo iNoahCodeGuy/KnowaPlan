@@ -52,17 +52,18 @@ Settlement is **one-shot** in v1: once you settle there is no
 re-marking in the app, and corrections are manual refunds from the
 Stripe dashboard. So go slowly here — it's two minutes.
 
-1. **Sweep the maybes FIRST — before you mark anyone.** Your very
-   first attendance mark closes RSVPs, and the close is permanent:
-   after it, a `maybe` can no longer tap Going, can't be marked
-   present, and silently drops out of the split (everyone else
-   pays more; the maybe pays nothing). So while the event is still
-   open, scan the roster's Answer column — anyone still `maybe`
-   (or `declined`) who actually played taps Going on their own
-   link NOW.
-2. On the admin roster, mark each person **present** or **absent**.
-   The first mark closes RSVPs automatically. Look around the
-   court while you do it — did everyone who played get marked?
+1. **Sweep the maybes FIRST — before you close RSVPs.** Closing
+   RSVPs is permanent: after it, a `maybe` can no longer tap
+   Going, can't be marked present, and silently drops out of the
+   split (everyone else pays more; the maybe pays nothing). So
+   while the event is still open, scan the roster's Answer column —
+   anyone still `maybe` (or `declined`) who actually played taps
+   Going on their own link NOW.
+2. **Close RSVPs, then mark.** Tap **Close RSVPs** to lock the
+   list — marking is off until you do, so a stray tap can't end
+   RSVPs early. The **present**/**absent** buttons appear on each
+   row once it's closed. Look around the court while you mark —
+   did everyone who played get marked?
 3. Tap **Settle up** and READ the preview:
    - the participant count and per-head share,
    - what your settle default will do to anyone you left unmarked,
@@ -140,7 +141,7 @@ Stripe dashboard. So go slowly here — it's two minutes.
 | Moment | Action |
 |---|---|
 | Morning | Create ($130 / 15), bookmark admin, Open RSVPs, text invite |
-| At court | Sweep maybes → mark present/absent → read preview → settle ONCE |
+| At court | Sweep maybes → Close RSVPs → mark present/absent → read preview → settle ONCE |
 | Cardless | Text each pay link from the report |
 | Later | Reload roster to watch payments land |
 | Mistake | Stripe dashboard → Payments → Refund |

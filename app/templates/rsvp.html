@@ -168,6 +168,12 @@
         </form>
         {% endif %}
       {% endif %}
+    {% elif payment.state == "none" and payment.charge_requested_at %}
+    <p>Your share is
+      {{ (payment.charge_requested_cents
+          or event.estimated_share_cents) | dollars }} — it's
+      charging to your saved card now. If it doesn't go through,
+      {{ planner.name }} will text you a payment link.</p>
     {% endif %}
   {% endif %}
 {% endif %}

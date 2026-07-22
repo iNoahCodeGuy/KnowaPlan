@@ -39,6 +39,10 @@ the group after you tap this.</p>
   <button>Cancel event…</button>
 </form>
 </div>
+{% if event.state == "open" %}
+<p class="muted">Marking who played turns on once you close
+RSVPs.</p>
+{% endif %}
 {% endif %}
 
 <h2>Share link</h2>
@@ -147,7 +151,7 @@ document.getElementById("copy-share").addEventListener(
     </div>
     {% if rsvp.state == "going"
           and rsvp.attendance == "unconfirmed"
-          and event.state in ["open", "closed"] %}
+          and event.state == "closed" %}
     <form class="person-actions" method="post"
           action="/admin/{{ event.admin_token }}/attendance">
       <input type="hidden" name="rsvp_id" value="{{ rsvp.id }}">

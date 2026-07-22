@@ -1,6 +1,7 @@
 """Attendee-facing polish: the payer's own page tells the truth
 (self-poll), and no machine enum is ever shown to an attendee.
 """
+
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -69,7 +70,11 @@ async def test_link_payment_shows_on_payers_own_page(
 ) -> None:
     # The false-copy bug: link paid, planner hasn't reloaded the
     # roster — the payer's own /r/ must not still say they owe.
-    _, rsvp, payment, = await _event_with_rsvp(
+    (
+        _,
+        rsvp,
+        payment,
+    ) = await _event_with_rsvp(
         db_session,
         event_state="settled",
         rsvp_state="attended",
@@ -152,3 +157,32 @@ async def test_me_badge_reads_human(
     resp = await client.get(f"/me/{attendee.attendee_token}")
     assert "played" in resp.text
     assert "attended" not in resp.text
+
+
+async def test_dangling_charge_shows_on_payers_page(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """F5: a player whose saved-card charge is mid-flight (record
+    stamped, Stripe unanswered) must see it on their own page — not
+    a blank where the money line belongs."""
+    event, rsvp, _ = await _event_with_rsvp(
+        db_session,
+        event_state="settled",
+        rsvp_state="attended",
+        attendance="present",
+    )
+    db_session.add(
+        Payment(
+            event_id=event.id,
+            attendee_id=rsvp.attendee_id,
+            attempt=1,
+            state="none",
+            charge_requested_at=datetime.now(timezone.utc),
+            charge_requested_cents=3000,
+        )
+    )
+    await db_session.commit()
+    resp = await client.get(f"/r/{rsvp.rsvp_token}")
+    assert resp.status_code == 200
+    assert "charging to your saved card" in resp.text
+    assert "$30.00" in resp.text
