@@ -4,11 +4,18 @@
 <h1>{{ event.title }}
   <span class="badge badge-{{ event.state }}">{{ event.state }}</span></h1>
 <p class="muted">
-  Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+  Starts {{ event.starts_at | when }} ·
   total {{ event.total_cost_cents | dollars }} ·
   goal {{ event.goal_attendance }} ·
   estimate {{ event.estimated_share_cents | dollars }}/person
 </p>
+{% if event.state in ["draft", "open"] %}
+{# Capability URL = the only credential (decisions.md 2026-07-13):
+   losing this link means losing the event's controls, so say so
+   where the planner still can act on it. #}
+<p class="muted">This page is your admin key — bookmark it.
+Anyone with this link controls the event.</p>
+{% endif %}
 
 {% if event.state == "draft" %}
 <form method="post" action="/admin/{{ event.admin_token }}/open">

@@ -9,6 +9,7 @@ the Stripe Payment Element island on /r/. Errors render HTML with
 real status codes — the audience is someone tapping a texted
 link, not an API client.
 """
+
 import secrets
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -100,7 +101,19 @@ def _dollars(cents: int) -> str:
     return f"${cents // 100}.{cents % 100:02d}"
 
 
+def _when(dt: datetime) -> str:
+    # The ONE place a datetime becomes screen text — friends read
+    # "6:00 PM", not "18:00". strftime alone can't drop the leading
+    # zero portably (%-I is glibc-only), hence the lstrip.
+    hour = dt.strftime("%I").lstrip("0")
+    return (
+        f"{dt.strftime('%a %b %d')}, "
+        f"{hour}:{dt.strftime('%M')} {dt.strftime('%p')}"
+    )
+
+
 templates.env.filters["dollars"] = _dollars
+templates.env.filters["when"] = _when
 templates.env.filters["label"] = _label
 templates.env.filters["btn_label"] = _btn_label
 
@@ -167,9 +180,7 @@ async def _event_by_admin_token(
     session: AsyncSession, token: str
 ) -> Event | None:
     return (
-        await session.execute(
-            select(Event).where(Event.admin_token == token)
-        )
+        await session.execute(select(Event).where(Event.admin_token == token))
     ).scalar_one_or_none()
 
 
@@ -177,19 +188,13 @@ async def _event_by_event_token(
     session: AsyncSession, token: str
 ) -> Event | None:
     return (
-        await session.execute(
-            select(Event).where(Event.event_token == token)
-        )
+        await session.execute(select(Event).where(Event.event_token == token))
     ).scalar_one_or_none()
 
 
-async def _rsvp_by_token(
-    session: AsyncSession, token: str
-) -> Rsvp | None:
+async def _rsvp_by_token(session: AsyncSession, token: str) -> Rsvp | None:
     return (
-        await session.execute(
-            select(Rsvp).where(Rsvp.rsvp_token == token)
-        )
+        await session.execute(select(Rsvp).where(Rsvp.rsvp_token == token))
     ).scalar_one_or_none()
 
 
@@ -198,9 +203,7 @@ async def _attendee_by_me_token(
 ) -> Attendee | None:
     return (
         await session.execute(
-            select(Attendee).where(
-                Attendee.attendee_token == token
-            )
+            select(Attendee).where(Attendee.attendee_token == token)
         )
     ).scalar_one_or_none()
 
@@ -320,9 +323,7 @@ async def create_event(
     )
     session.add(event)
     await session.commit()
-    return RedirectResponse(
-        f"/admin/{event.admin_token}", status_code=303
-    )
+    return RedirectResponse(f"/admin/{event.admin_token}", status_code=303)
 
 
 @router.post("/admin/{token}/open")
@@ -366,9 +367,7 @@ async def admin_page(
         p.attendee_id: p
         for p in (
             await session.execute(
-                select(Payment).where(
-                    Payment.event_id == event.id
-                )
+                select(Payment).where(Payment.event_id == event.id)
             )
         ).scalars()
     }
@@ -387,10 +386,7 @@ async def admin_page(
                 await session.commit()
             except stripe.StripeError:
                 poll_failed.add(payment.attendee_id)
-    share_link = (
-        str(request.base_url).rstrip("/")
-        + f"/e/{event.event_token}"
-    )
+    share_link = str(request.base_url).rstrip("/") + f"/e/{event.event_token}"
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -452,15 +448,11 @@ async def start_rsvp(
         return _not_found(request)
     planner = await session.get(Planner, event.planner_id)
     try:
-        rsvp = await get_or_create_rsvp(
-            session, event, name, phone
-        )
+        rsvp = await get_or_create_rsvp(session, event, name, phone)
     except EventNotOpen:
         # The form was honest when rendered; the event changed
         # underneath it — Conflict, and the stale page says why.
-        return _render_event(
-            request, event, planner, status_code=409
-        )
+        return _render_event(request, event, planner, status_code=409)
     except ValueError as err:
         return _render_event(
             request,
@@ -470,9 +462,7 @@ async def start_rsvp(
             form={"name": name, "phone": phone},
             status_code=400,
         )
-    return RedirectResponse(
-        f"/r/{rsvp.rsvp_token}", status_code=303
-    )
+    return RedirectResponse(f"/r/{rsvp.rsvp_token}", status_code=303)
 
 
 @router.get("/r/{token}")
@@ -492,10 +482,7 @@ async def rsvp_page(
     planner = await session.get(Planner, event.planner_id)
     card_banner: str | None = None
     card_error: str | None = None
-    if (
-        setup_intent is not None
-        and attendee.stripe_customer_id is not None
-    ):
+    if setup_intent is not None and attendee.stripe_customer_id is not None:
         # Finalize a card save — the single server path for both
         # the 3DS-redirect return and the island's own navigation.
         # record_saved_card re-retrieves the intent and refuses
@@ -510,8 +497,7 @@ async def rsvp_page(
         except ValueError:
             return _cannot(
                 request,
-                "That card confirmation doesn't belong to this "
-                "link.",
+                "That card confirmation doesn't belong to this link.",
             )
         except stripe.StripeError:
             card_banner = "unverified"
@@ -543,12 +529,10 @@ async def rsvp_page(
             await session.commit()
         except stripe.StripeError:
             pass
-    choices = (
-        allowed_choices(rsvp) if event.state == "open" else ()
-    )
-    show_card_section = (
-        event.state == "open"
-        and rsvp.state in ("going", "maybe")
+    choices = allowed_choices(rsvp) if event.state == "open" else ()
+    show_card_section = event.state == "open" and rsvp.state in (
+        "going",
+        "maybe",
     )
     return templates.TemplateResponse(
         request,
@@ -563,9 +547,7 @@ async def rsvp_page(
             "show_card_section": show_card_section,
             "card_banner": card_banner,
             "card_error": card_error,
-            "publishable_key": (
-                get_settings().stripe_publishable_key
-            ),
+            "publishable_key": (get_settings().stripe_publishable_key),
         },
     )
 
@@ -609,9 +591,7 @@ async def setup_intent_endpoint(
     its client_secret. No money moves (a save, not a charge)."""
     rsvp = await _rsvp_by_token(session, token)
     if rsvp is None:
-        return JSONResponse(
-            {"error": "unknown link"}, status_code=404
-        )
+        return JSONResponse({"error": "unknown link"}, status_code=404)
     event = await session.get(Event, rsvp.event_id)
     if (
         event is None
@@ -634,9 +614,7 @@ async def setup_intent_endpoint(
         )
     attendee = await session.get(Attendee, rsvp.attendee_id)
     if attendee is None:
-        return JSONResponse(
-            {"error": "unknown link"}, status_code=404
-        )
+        return JSONResponse({"error": "unknown link"}, status_code=404)
     try:
         secret = await create_setup_intent(attendee)
     except stripe.StripeError:
@@ -645,7 +623,11 @@ async def setup_intent_endpoint(
         # 2026-07-13).
         await session.commit()
         return JSONResponse(
-            {"error": "card setup is unavailable right now"},
+            {
+                "error": "card setup is unavailable right now — "
+                "you can skip it: you'll get a tap-to-pay "
+                "link after the game instead"
+            },
             status_code=502,
         )
     await session.commit()  # persist stripe_customer_id
@@ -744,10 +726,7 @@ def _settle_math(
     unmarked = 0
     maybes = 0
     for rsvp, attendee in rows:
-        undecided = (
-            rsvp.state == "going"
-            and rsvp.attendance == "unconfirmed"
-        )
+        undecided = rsvp.state == "going" and rsvp.attendance == "unconfirmed"
         if rsvp.attendance == "present":
             participants.append(attendee)
         elif undecided:
@@ -759,8 +738,7 @@ def _settle_math(
     divisor = len(participants)
     share = event.total_cost_cents // divisor if divisor else 0
     planner_playing = any(
-        attendee.id == planner.attendee_id
-        for attendee in participants
+        attendee.id == planner.attendee_id for attendee in participants
     )
     chargeable = divisor - (1 if planner_playing else 0)
     over = share > event.estimated_share_cents
@@ -769,9 +747,7 @@ def _settle_math(
         "share": share,
         # Mirrors settle_event's sub-50¢ refusal — the preview
         # must never offer a settle the service will refuse.
-        "too_small": (
-            chargeable > 0 and 0 < share < MIN_CHARGE_CENTS
-        ),
+        "too_small": (chargeable > 0 and 0 < share < MIN_CHARGE_CENTS),
         "cap_too_small": (
             chargeable > 0
             and 0 < event.estimated_share_cents < MIN_CHARGE_CENTS
@@ -782,9 +758,7 @@ def _settle_math(
         "planner_playing": planner_playing,
         "over_estimate": over,
         "capped_shortfall": (
-            (share - event.estimated_share_cents) * chargeable
-            if over
-            else 0
+            (share - event.estimated_share_cents) * chargeable if over else 0
         ),
         "assume": assume,
     }
@@ -1123,9 +1097,7 @@ async def settle_route(
         p.attendee_id: p
         for p in (
             await session.execute(
-                select(Payment).where(
-                    Payment.event_id == event.id
-                )
+                select(Payment).where(Payment.event_id == event.id)
             )
         ).scalars()
     }

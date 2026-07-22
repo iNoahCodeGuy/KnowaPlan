@@ -7,7 +7,7 @@
 {% block content %}
 <h1>{{ event.title }}</h1>
 <p class="muted">
-  Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+  Starts {{ event.starts_at | when }} ·
   about {{ event.estimated_share_cents | dollars }}/person
 </p>
 

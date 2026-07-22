@@ -14,7 +14,7 @@
       <span class="badge">{{ rsvp.state | label }}</span>
     </div>
     <p class="person-meta">
-      Starts {{ event.starts_at.strftime("%a %b %d, %H:%M") }} ·
+      Starts {{ event.starts_at | when }} ·
       about {{ event.estimated_share_cents | dollars }}/person
       {% if event.state == "closed" %}
       <span class="muted">· RSVPs closed</span>
